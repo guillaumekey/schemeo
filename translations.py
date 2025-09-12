@@ -365,11 +365,6 @@ Ajoutez le code PHP dans votre fichier functions.php""",
         'worst_rating': 'Note minimale',
         'review_count': 'Nombre d\'avis',
 
-        # Section test
-        'test_section': 'Test de compatibilité',
-        'test_schemas': 'Tester les schemas',
-        'test_results': 'Résultats du test',
-
         # Messages
         'error_api_key': 'Veuillez configurer votre clé API ValueSERP',
         'error_keyword': 'Veuillez entrer un mot-clé',

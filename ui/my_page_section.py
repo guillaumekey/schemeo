@@ -1,5 +1,6 @@
 """
 Module pour la section d'analyse de sa propre page
+Version corrigée avec gestion de la nouvelle structure de données
 """
 import streamlit as st
 import pandas as pd
@@ -11,8 +12,45 @@ from utils.helpers import is_valid_url, normalize_url, get_schema_icon
 from utils.cache import get_cached_schema_analysis, set_cached_schema_analysis
 
 
+def ensure_data_compatibility():
+    """Assure la compatibilité entre les différentes structures de données"""
+    # Si on a schema_results mais pas serp_results, faire la copie
+    if ('schema_results' in st.session_state and
+            st.session_state.schema_results and
+            'serp_results' not in st.session_state):
+        st.session_state.serp_results = st.session_state.schema_results
+
+    # Si on a serp_results mais pas schema_results, faire la copie inverse
+    elif ('serp_results' in st.session_state and
+          st.session_state.serp_results and
+          'schema_results' not in st.session_state):
+        st.session_state.schema_results = st.session_state.serp_results
+
+
+def get_serp_analysis_data():
+    """
+    Récupère les données d'analyse SERP pour la comparaison
+    Gère les différentes structures possibles
+    """
+    ensure_data_compatibility()
+
+    # Essayer la nouvelle structure
+    if 'serp_results' in st.session_state and st.session_state.serp_results:
+        return st.session_state.serp_results.get('analysis', {})
+
+    # Essayer l'ancienne structure
+    if 'schema_results' in st.session_state and st.session_state.schema_results:
+        return st.session_state.schema_results.get('analysis', {})
+
+    return None
+
+
 def my_page_section():
-    """Section pour analyser sa propre page"""
+    """Section pour analyser sa propre page - Version corrigée"""
+
+    # S'assurer de la compatibilité des données
+    ensure_data_compatibility()
+
     my_url = st.text_input(
         get_text('my_url', st.session_state.language),
         placeholder=get_text('my_url_placeholder', st.session_state.language)
@@ -79,8 +117,9 @@ def my_page_section():
         _display_current_schemas()
 
         # Comparaison avec le top 10 si disponible
-        if st.session_state.serp_results and st.session_state.serp_results.get('analysis'):
-            _display_comparison()
+        serp_analysis = get_serp_analysis_data()
+        if serp_analysis:
+            _display_comparison(serp_analysis)
         else:
             st.info(
                 "💡 Effectuez d'abord une recherche Google dans l'onglet 'Recherche Google' pour comparer avec le top 10")
@@ -131,226 +170,118 @@ def _display_current_schemas():
         st.write(get_text('no_schemas_found', st.session_state.language))
 
 
-def _display_comparison():
-    """Affiche la comparaison avec le top 10"""
+def _display_comparison(serp_analysis):
+    """Affiche la comparaison avec le top 10 - VERSION SIMPLIFIÉE"""
     schemas_data = st.session_state.my_page_schemas
 
-    st.subheader(f"🔍 Comparaison avec le Top 10 Google")
+    st.subheader(f"🆚 Comparaison avec le Top 10 Google")
 
     analyzer = SchemaAnalyzer()
     comparison = analyzer.compare_with_page(
-        st.session_state.serp_results['analysis'],
+        serp_analysis,
         set(schemas_data.get('schema_types', []))
     )
 
-    # Calculer les métriques améliorées
+    # Calculer les métriques
     my_page_unique_schemas = len(set(schemas_data.get('schema_types', [])))
-    top10_unique_schemas = len(st.session_state.serp_results['analysis']['schema_coverage'])
+    top10_unique_schemas = len(serp_analysis.get('schema_coverage', {}))
 
-    # Taux de couverture : schemas de ma page présents dans le top 10 / total schemas du top 10
+    # Taux de couverture
     if top10_unique_schemas > 0:
         coverage_rate = (len(set(comparison['current_schemas']) & set(
-            st.session_state.serp_results['analysis']['schema_coverage'].keys())) / top10_unique_schemas) * 100
+            serp_analysis.get('schema_coverage', {}).keys())) / top10_unique_schemas) * 100
     else:
         coverage_rate = 0
 
-    # Métriques de comparaison améliorées
-    col1, col2, col3 = st.columns(3)
+    # Métriques principales
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            label="Mes schemas uniques",
-            value=my_page_unique_schemas,
-            help="Nombre de types de schemas différents sur votre page"
+            label="Mes schemas",
+            value=my_page_unique_schemas
         )
 
     with col2:
         st.metric(
-            label="Schemas du Top 10",
-            value=top10_unique_schemas,
-            help="Nombre de types de schemas différents trouvés dans le top 10"
+            label="Top 10 schemas",
+            value=top10_unique_schemas
         )
 
     with col3:
         st.metric(
-            label="Taux de couverture",
-            value=f"{coverage_rate:.0f}%",
-            delta=f"{my_page_unique_schemas}/{top10_unique_schemas}",
-            help="Pourcentage des schemas du top 10 que vous avez"
+            label="Couverture",
+            value=f"{coverage_rate:.0f}%"
         )
 
-    # Analyse détaillée de la comparaison
-    _display_comparison_table(comparison)
+    with col4:
+        competitive_missing = len(comparison.get('missing_competitive', []))
+        if competitive_missing == 0:
+            st.metric("Schemas compétitifs", "✅ Complet", delta="Excellent")
+        else:
+            st.metric("Manquants", competitive_missing, delta=f"-{competitive_missing}")
 
-    # Recommandations - Seulement haute et moyenne priorité
-    _display_filtered_recommendations(comparison, analyzer)
+    # TABLEAU DE COMPARAISON DÉTAILLÉ - PLACÉ DIRECTEMENT ICI
+    st.subheader("📊 Analyse détaillée des schemas")
 
-
-def _display_comparison_table(comparison):
-    """Affiche le tableau de comparaison"""
-    st.subheader(f"📊 Analyse de la comparaison")
-
-    # Créer un tableau de comparaison
     comparison_data = []
-    all_schemas = set()
 
-    # Récupérer tous les schemas du top 10
-    for schema_type, data in st.session_state.serp_results['analysis']['schema_coverage'].items():
-        all_schemas.add(schema_type)
+    # Tous les schemas uniques du top 10
+    all_top10_schemas = set(serp_analysis.get('schema_coverage', {}).keys())
+    my_schemas = set(comparison['current_schemas'])
+
+    for schema_type in all_top10_schemas:
+        schema_data = serp_analysis['schema_coverage'][schema_type]
+
+        # Déterminer la priorité
+        competitive_schemas = serp_analysis.get('competitive_schemas', [])
+        if schema_type in competitive_schemas:
+            priority = 'Haute'
+        elif schema_data.get('percentage', 0) >= 50:
+            priority = 'Moyenne'
+        else:
+            priority = 'Faible'
+
         comparison_data.append({
             'Schema': f"{get_schema_icon(schema_type)} {schema_type}",
-            'Top 10': f"{data['count']}/10 ({data['percentage']}%)",
-            'Votre page': '✅ Oui' if schema_type in comparison['current_schemas'] else '❌ Non',
-            'Priorité': '🔴 Haute' if schema_type in comparison['missing_competitive'] else
-            '🟡 Moyenne' if data['percentage'] > 30 else '🟢 Basse'
+            'Ma page': '✅' if schema_type in my_schemas else '❌',
+            'Usage Top 10': f"{schema_data.get('percentage', 0)}%",
+            'Sites': schema_data.get('count', 0),
+            'Priorité': priority
         })
 
-    # Ajouter vos schemas uniques
-    for schema_type in comparison['unique_schemas']:
-        if schema_type not in all_schemas:
+    # Ajouter mes schemas uniques
+    for schema_type in my_schemas:
+        if schema_type not in all_top10_schemas:
             comparison_data.append({
                 'Schema': f"{get_schema_icon(schema_type)} {schema_type}",
-                'Top 10': '0/10 (0%)',
-                'Votre page': '✅ Oui',
-                'Priorité': '🔵 Unique'
+                'Ma page': '✅',
+                'Usage Top 10': '0%',
+                'Sites': 0,
+                'Priorité': 'Unique'
             })
 
-    # Trier par priorité
-    priority_order = {'🔴 Haute': 0, '🟡 Moyenne': 1, '🟢 Basse': 2, '🔵 Unique': 3}
-    comparison_data.sort(key=lambda x: priority_order.get(x['Priorité'], 4))
+    # Créer et afficher le DataFrame
+    df_comparison = pd.DataFrame(comparison_data)
+
+    # Trier par priorité et usage
+    priority_order = {'Haute': 4, 'Moyenne': 3, 'Faible': 2, 'Unique': 1}
+    df_comparison['_priority_order'] = df_comparison['Priorité'].map(priority_order)
+    df_comparison = df_comparison.sort_values(['_priority_order', 'Sites'], ascending=[False, False])
+
+    # Supprimer la colonne de tri temporaire
+    df_comparison = df_comparison.drop('_priority_order', axis=1)
 
     # Afficher le tableau
-    df_comparison = pd.DataFrame(comparison_data)
-    st.dataframe(df_comparison, use_container_width=True, hide_index=True)
-
-
-def _display_filtered_recommendations(comparison, analyzer):
-    """Affiche uniquement les recommandations de priorité haute et moyenne"""
-    st.subheader(f"💡 {get_text('recommended_schemas', st.session_state.language)}")
-
-    # Créer des recommandations basées directement sur l'analyse
-    recommendations = []
-
-    # Récupérer tous les schemas manquants avec leur priorité
-    for schema_type, data in st.session_state.serp_results['analysis']['schema_coverage'].items():
-        if schema_type not in comparison['current_schemas']:
-            # Déterminer la priorité
-            if schema_type in comparison['missing_competitive']:
-                priority = 'high'
-            elif data['percentage'] >= 30:  # Changé de > à >= pour inclure 30%
-                priority = 'medium'
-            else:
-                priority = 'low'
-
-            # Ajouter uniquement haute et moyenne priorité
-            if priority in ['high', 'medium']:
-                position_data = st.session_state.serp_results['analysis']['position_analysis'].get(schema_type, {})
-                recommendations.append({
-                    'schema': schema_type,
-                    'priority': priority,
-                    'details': {
-                        'avg_position': position_data.get('average_position', 'N/A'),
-                        'top_3_count': position_data.get('in_top_3', 0),
-                        'coverage': data['percentage']
-                    }
-                })
-
-    # Trier par priorité
-    recommendations.sort(key=lambda x: 0 if x['priority'] == 'high' else 1)
-
-    if recommendations:
-        # Séparer par priorité
-        high_priority = [r for r in recommendations if r['priority'] == 'high']
-        medium_priority = [r for r in recommendations if r['priority'] == 'medium']
-
-        # Variable pour tracker si on a affiché des recommandations
-        has_recommendations = False
-
-        # Afficher les recommandations haute priorité
-        if high_priority:
-            has_recommendations = True
-            st.write("**🔴 Priorité haute** (Schemas présents dans le top 3)")
-            for rec in high_priority:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    # Utiliser SchemaAnalyzer pour les insights
-                    analyzer = SchemaAnalyzer()
-                    insights = analyzer.get_schema_insights(rec['schema'])
-                    st.write(f"{get_schema_icon(rec['schema'])} **{rec['schema']}**")
-                    st.caption(f"Position moyenne: {rec['details'].get('avg_position', 'N/A')} | "
-                               f"Présent dans le top 3: {rec['details'].get('top_3_count', 0)} fois")
-
-                    # Afficher les bénéfices
-                    if insights.get('benefits'):
-                        with st.expander(f"Bénéfices de {rec['schema']}"):
-                            for benefit in insights['benefits']:
-                                st.write(f"• {benefit}")
-
-                with col2:
-                    if st.button(f"➕ Ajouter", key=f"add_high_{rec['schema']}"):
-                        if rec['schema'] not in st.session_state.get('selected_schemas', []):
-                            if 'selected_schemas' not in st.session_state:
-                                st.session_state.selected_schemas = []
-                            st.session_state.selected_schemas.append(rec['schema'])
-                            st.success(f"{rec['schema']} ajouté!")
-                            st.rerun()
-
-        # Afficher les recommandations priorité moyenne
-        if medium_priority:
-            has_recommendations = True
-            if high_priority:  # Ajouter un espace si on a déjà affiché haute priorité
-                st.write("")
-            st.write("**🟡 Priorité moyenne** (Pratique courante ≥30%)")
-            for rec in medium_priority:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    # Utiliser SchemaAnalyzer pour les insights
-                    analyzer = SchemaAnalyzer()
-                    insights = analyzer.get_schema_insights(rec['schema'])
-                    st.write(f"{get_schema_icon(rec['schema'])} **{rec['schema']}**")
-                    st.caption(f"Présent sur {rec['details'].get('coverage', 0)}% des sites")
-
-                    # Afficher les bénéfices
-                    if insights.get('benefits'):
-                        with st.expander(f"Bénéfices de {rec['schema']}"):
-                            for benefit in insights['benefits']:
-                                st.write(f"• {benefit}")
-
-                with col2:
-                    if st.button(f"➕ Ajouter", key=f"add_med_{rec['schema']}"):
-                        if rec['schema'] not in st.session_state.get('selected_schemas', []):
-                            if 'selected_schemas' not in st.session_state:
-                                st.session_state.selected_schemas = []
-                            st.session_state.selected_schemas.append(rec['schema'])
-                            st.success(f"{rec['schema']} ajouté!")
-                            st.rerun()
-
-        if not has_recommendations:
-            st.info(
-                "✅ Votre page est déjà bien optimisée ! Vous avez tous les schemas importants (haute et moyenne priorité).")
-    else:
-        st.info("✅ Votre page est déjà parfaitement optimisée ! Vous avez tous les schemas importants.")
-
-    # Bouton pour aller au générateur avec les schemas sélectionnés
-    if st.session_state.get('selected_schemas'):
-        st.write("---")
-
-        # Afficher les schemas sélectionnés
-        with st.expander(f"📋 Schemas sélectionnés ({len(st.session_state.selected_schemas)})", expanded=False):
-            for schema in st.session_state.selected_schemas:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"• {get_schema_icon(schema)} {schema}")
-                with col2:
-                    if st.button("❌", key=f"remove_{schema}", help=f"Retirer {schema}"):
-                        st.session_state.selected_schemas.remove(schema)
-                        st.rerun()
-
-        # Bouton principal pour générer
-        if st.button("🛠️ Générer les schemas sélectionnés", type="primary", use_container_width=True,
-                     key="generate_selected_btn"):
-            st.session_state.active_tab = 3
-            st.success(f"✅ {len(st.session_state.selected_schemas)} schemas prêts à générer !")
-            st.info("👉 Cliquez sur l'onglet **'🛠️ Générateur de schemas'** ci-dessus pour continuer.")
-            # Note: Le rerun() ne fonctionne pas bien avec les tabs de Streamlit
-            # L'utilisateur doit cliquer manuellement sur l'onglet
+    st.dataframe(
+        df_comparison,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Schema": st.column_config.TextColumn("Schema", width="medium"),
+            "Ma page": st.column_config.TextColumn("Ma page", width="small"),
+            "Usage Top 10": st.column_config.TextColumn("Usage Top 10", width="small"),
+            "Sites": st.column_config.NumberColumn("Sites", width="small"),
+            "Priorité": st.column_config.TextColumn("Priorité", width="small")
+        }
+    )
