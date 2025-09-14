@@ -1,9 +1,9 @@
 """
 Section de recherche avec mécanisme de retry et diagnostic avancé
-Version corrigée et compatible
+Version corrigée et compatible - Entièrement traduite
 """
 import streamlit as st
-from translations import get_text
+from translations import get_text, format_text
 from api.valueserp import ValueSERPAPIWithRetry, diagnose_valueserp_issues
 from scrapers.schema_scraper import SchemaScraper
 from analyzers.schema_analyzer import SchemaAnalyzer
@@ -20,14 +20,16 @@ def search_section():
         with st.container():
             col1, col2 = st.columns([4, 1])
             with col1:
-                st.info(
-                    "ℹ️ **Système de retry automatique activé** : En cas d'erreur 503, le système réessaiera automatiquement.")
+                st.info(f"ℹ️ {get_text('valueserp_status_info', st.session_state.language)}")
             with col2:
-                if st.button("🔍 Diagnostic", help="Vérifier le statut de l'API"):
+                if st.button(
+                        f"🔍 {get_text('diagnostic', st.session_state.language)}",
+                        help=get_text('check_api_status', st.session_state.language)
+                ):
                     run_diagnostic()
 
     # Configuration de la recherche
-    st.subheader("🔍 Configuration de la recherche")
+    st.subheader(f"🔍 {get_text('search_configuration', st.session_state.language)}")
 
     col1, col2 = st.columns(2)
 
@@ -35,66 +37,95 @@ def search_section():
         keyword = st.text_input(
             get_text('keyword', st.session_state.language),
             placeholder=get_text('keyword_placeholder', st.session_state.language),
-            help="Entrez le mot-clé principal pour analyser la concurrence"
+            help=get_text('keyword_help', st.session_state.language)
         )
 
     with col2:
+        # Format function dynamique pour les langues de recherche
+        def get_search_language_display(lang_code):
+            lang_names = {
+                'fr': {
+                    'fr': '🇫🇷 Français',
+                    'en': '🇬🇧 Anglais',
+                    'es': '🇪🇸 Espagnol',
+                    'de': '🇩🇪 Allemand',
+                    'it': '🇮🇹 Italien'
+                },
+                'en': {
+                    'fr': '🇫🇷 French',
+                    'en': '🇬🇧 English',
+                    'es': '🇪🇸 Spanish',
+                    'de': '🇩🇪 German',
+                    'it': '🇮🇹 Italian'
+                },
+                'es': {
+                    'fr': '🇫🇷 Francés',
+                    'en': '🇬🇧 Inglés',
+                    'es': '🇪🇸 Español',
+                    'de': '🇩🇪 Alemán',
+                    'it': '🇮🇹 Italiano'
+                }
+            }
+            current_lang = st.session_state.get('language', 'fr')
+            return lang_names.get(current_lang, lang_names['fr']).get(lang_code, lang_code)
+
         search_language = st.selectbox(
             get_text('search_language', st.session_state.language),
             options=['fr', 'en', 'es', 'de', 'it'],
-            format_func=lambda x: {
-                'fr': '🇫🇷 Français',
-                'en': '🇬🇧 English',
-                'es': '🇪🇸 Español',
-                'de': '🇩🇪 Deutsch',
-                'it': '🇮🇹 Italiano'
-            }[x],
-            help="Langue des résultats de recherche Google"
+            format_func=get_search_language_display,
+            help=get_text('search_language_help', st.session_state.language)
         )
 
     # Localisation simplifiée pour éviter les problèmes
-    st.subheader("🌍 Localisation")
+    st.subheader(f"🌐 {get_text('localization', st.session_state.language)}")
 
     # Options pré-testées et fonctionnelles
     reliable_locations = get_reliable_locations()
 
     location_display = st.selectbox(
-        "Choisir une localisation :",
+        get_text('choose_location', st.session_state.language),
         options=list(reliable_locations.keys()),
         index=0,
-        help="Localisations testées et fiables avec ValueSERP"
+        help=get_text('tested_reliable_locations', st.session_state.language)
     )
 
     location = reliable_locations[location_display]
 
     # Paramètres avancés (optionnel)
-    with st.expander("⚙️ Paramètres avancés", expanded=False):
+    with st.expander(f"⚙️ {get_text('advanced_settings', st.session_state.language)}", expanded=False):
         col1, col2 = st.columns(2)
 
         with col1:
             retry_enabled = st.checkbox(
-                "🔄 Retry automatique en cas d'erreur 503",
+                f"🔄 {get_text('auto_retry_503', st.session_state.language)}",
                 value=True,
-                help="Réessaie automatiquement en cas de surcharge du serveur"
+                help=get_text('retry_help', st.session_state.language)
             )
 
             if retry_enabled:
-                max_retries = st.slider("Nombre max de tentatives", 1, 5, 3)
+                max_retries = st.slider(
+                    get_text('max_retries', st.session_state.language),
+                    1, 5, 3
+                )
             else:
                 max_retries = 1
 
         with col2:
-            show_debug = st.checkbox("🔧 Mode debug", value=False)
+            show_debug = st.checkbox(
+                f"🔧 {get_text('debug_mode', st.session_state.language)}",
+                value=False
+            )
 
         if show_debug:
-            st.code(f"""
-Paramètres de recherche :
-• Mot-clé : {keyword or '[non défini]'}
-• Localisation : {location}
-• Langue : {search_language}
-• Retry activé : {retry_enabled}
-• Max tentatives : {max_retries}
-            """)
+            debug_params = f"""
+{get_text('search_params', st.session_state.language)} :
+• {get_text('keyword', st.session_state.language)} : {keyword or get_text('keyword_undefined', st.session_state.language)}
+• {get_text('localization', st.session_state.language)} : {location}
+• {get_text('search_language', st.session_state.language)} : {search_language}
+• {get_text('auto_retry_503', st.session_state.language)} : {retry_enabled}
+• {get_text('max_retries', st.session_state.language)} : {max_retries}
+            """
+            st.code(debug_params)
 
     # Bouton principal d'analyse
     st.divider()
@@ -103,21 +134,21 @@ Paramètres de recherche :
 
     with col2:
         analyze_button = st.button(
-            "🚀 " + get_text('analyze_button', st.session_state.language),
+            f"🚀 {get_text('analyze_button', st.session_state.language)}",
             type="primary",
             use_container_width=True,
-            help="Lance l'analyse avec retry automatique en cas de problème"
+            help=get_text('launch_analysis', st.session_state.language)
         )
 
     if analyze_button:
         # Validations
         if not st.session_state.api_key:
-            st.error("🔑 " + get_text('error_api_key', st.session_state.language))
-            st.info("💡 Configurez votre clé API ValueSERP dans la barre latérale")
+            st.error(f"🔑 {get_text('error_api_key', st.session_state.language)}")
+            st.info(f"💡 {get_text('configure_api_key', st.session_state.language)}")
             return
 
         if not keyword or len(keyword.strip()) < 2:
-            st.error("📝 " + get_text('error_keyword', st.session_state.language))
+            st.error(f"🔍 {get_text('error_keyword', st.session_state.language)}")
             return
 
         keyword = keyword.strip()
@@ -125,7 +156,7 @@ Paramètres de recherche :
         # Vérifier le cache en premier
         cached_results = get_cached_serp_results(keyword, location, search_language)
         if cached_results:
-            st.success("📦 Résultats récupérés du cache - pas de requête API nécessaire")
+            st.success(f"📦 {get_text('no_api_needed', st.session_state.language)}")
             st.session_state.serp_results = cached_results
             st.session_state.schema_analysis = cached_results.get('analysis')
             st.rerun()
@@ -143,7 +174,7 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
     progress_container = st.container()
 
     with status_container:
-        st.info("🔍 Démarrage de l'analyse avec retry automatique...")
+        st.info(f"🔍 {get_text('starting_analysis', st.session_state.language)}")
 
     with progress_container:
         progress_bar = st.progress(0)
@@ -155,7 +186,7 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
         api.max_retries = max_retries - 1  # -1 car on compte la première tentative
 
         # Étape 1: Recherche SERP avec retry
-        status_text.text("📡 Recherche des résultats Google (avec retry automatique)...")
+        status_text.text(f"📡 {get_text('searching_google_results', st.session_state.language)}")
         progress_bar.progress(20)
 
         search_result = api.search_google_with_retry(
@@ -165,7 +196,7 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
         )
 
         if not search_result:
-            st.error("❌ Aucune réponse de l'API après tous les retries")
+            st.error(f"❌ {get_text('no_api_response', st.session_state.language)}")
             return
 
         # Vérifier s'il y a une erreur
@@ -173,49 +204,50 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
             status_code = search_result.get('status_code', 'N/A')
             error_msg = search_result['error']
 
-            st.error(f"❌ Erreur {status_code}: {error_msg}")
+            st.error(f"❌ {get_text('api_error', st.session_state.language)} {status_code}: {error_msg}")
 
             # Afficher les suggestions si disponibles
             if 'suggestions' in search_result:
-                st.info("💡 **Solutions suggérées:**")
+                st.info(f"💡 {get_text('suggested_solutions', st.session_state.language)}")
                 for suggestion in search_result['suggestions']:
                     st.write(f"• {suggestion}")
 
             # Suggestions spécifiques selon l'erreur
             if status_code == 503:
-                st.warning("⚠️ **Service temporairement surchargé**")
+                st.warning(f"⚠️ {get_text('service_overloaded', st.session_state.language)}")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🔄 Réessayer maintenant"):
+                    if st.button(f"🔄 {get_text('retry_now', st.session_state.language)}"):
                         st.rerun()
                 with col2:
-                    if st.button("📊 Vérifier le statut ValueSERP"):
-                        st.link_button("🌐 Page de statut ValueSERP", "https://valueserp.statuspage.io/")
+                    if st.button(f"📊 {get_text('check_valueserp_status', st.session_state.language)}"):
+                        st.link_button(f"🌐 {get_text('valueserp_status_page', st.session_state.language)}",
+                                       "https://valueserp.statuspage.io/")
 
             return
 
         # Vérifier les résultats organiques
         results = search_result.get('organic_results', [])
         if not results:
-            st.warning("⚠️ Aucun résultat organique trouvé pour ce mot-clé")
+            st.warning(f"⚠️ {get_text('no_organic_results', st.session_state.language)}")
             return
 
         progress_bar.progress(40)
-        status_text.text(f"✅ {len(results)} résultats récupérés - Analyse des schemas...")
+        status_text.text(format_text('results_retrieved_analyzing', st.session_state.language, count=len(results)))
 
         # Étape 2: Analyse des schemas
         schema_scraper = SchemaScraper()
         scraper_results = schema_scraper.analyze_serp_results(results)
 
         progress_bar.progress(70)
-        status_text.text("📊 Traitement et analyse des données...")
+        status_text.text(f"📊 {get_text('processing_analyzing_data', st.session_state.language)}")
 
         # Étape 3: Analyse des données
         analyzer = SchemaAnalyzer()
         analysis = analyzer.analyze_serp_schemas(scraper_results)
 
         progress_bar.progress(90)
-        status_text.text("✅ Finalisation...")
+        status_text.text(f"✅ {get_text('finalizing', st.session_state.language)}")
 
         # Combiner les résultats
         final_results = {
@@ -243,23 +275,25 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
         status_container.empty()
         progress_container.empty()
 
-        st.success("🎉 Analyse terminée avec succès !")
+        st.success(f"🎉 {get_text('analysis_complete', st.session_state.language)}")
 
+        # Métriques finales
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("URLs analysées", len(scraper_results.get('urls_analyzed', [])))
+            st.metric(get_text('urls_analyzed', st.session_state.language),
+                      len(scraper_results.get('urls_analyzed', [])))
         with col2:
-            st.metric("Types de schemas", len(analysis.get('schema_coverage', {})))
+            st.metric(get_text('schema_types', st.session_state.language), len(analysis.get('schema_coverage', {})))
         with col3:
-            st.metric("Total schemas", total_schemas)
+            st.metric(get_text('total_schemas', st.session_state.language), total_schemas)
 
-        st.info("👉 Consultez l'onglet **'Résultats de l'analyse'** pour voir les détails")
+        st.info(f"👉 {get_text('check_results_tab', st.session_state.language)}")
 
         # Masquer l'alerte de statut après succès
         st.session_state.show_valueserp_status = False
 
     except Exception as e:
-        st.error(f"❌ Erreur inattendue: {str(e)}")
+        st.error(f"❌ {get_text('unexpected_error', st.session_state.language)}: {str(e)}")
         if show_debug:
             st.exception(e)
 
@@ -267,13 +301,13 @@ def perform_search_with_retry(keyword, location, location_display, search_langua
 def run_diagnostic():
     """Lance un diagnostic complet de ValueSERP"""
     if not st.session_state.api_key:
-        st.error("🔑 Clé API manquante pour le diagnostic")
+        st.error(f"🔑 {get_text('missing_api_key_diagnostic', st.session_state.language)}")
         return
 
-    with st.spinner("🔍 Diagnostic en cours..."):
+    with st.spinner(f"🔍 {get_text('diagnostic_running', st.session_state.language)}"):
         diagnosis = diagnose_valueserp_issues(st.session_state.api_key)
 
-    st.subheader("📋 Rapport de diagnostic ValueSERP")
+    st.subheader(f"📋 {get_text('valueserp_diagnostic_report', st.session_state.language)}")
 
     # Statut global
     status = diagnosis['service_status']['status']
@@ -284,26 +318,28 @@ def run_diagnostic():
     elif status == 'degraded':
         st.warning(f"⚠️ {diagnosis['service_status']['message']}")
         if 'details' in diagnosis['service_status']:
-            st.write(f"**Détails:** {diagnosis['service_status']['details']}")
+            st.write(f"**{get_text('details', st.session_state.language)}:** {diagnosis['service_status']['details']}")
     else:
         st.error(f"❌ {diagnosis['service_status']['message']}")
         if 'details' in diagnosis['service_status']:
-            st.write(f"**Détails:** {diagnosis['service_status']['details']}")
+            st.write(f"**{get_text('details', st.session_state.language)}:** {diagnosis['service_status']['details']}")
 
     # Recommandations
     if diagnosis['recommendations']:
-        st.subheader("💡 Recommandations")
+        st.subheader(f"💡 {get_text('recommendations', st.session_state.language)}")
         for rec in diagnosis['recommendations']:
             st.write(f"• {rec}")
 
     # Informations techniques
-    with st.expander("🔧 Informations techniques", expanded=False):
+    with st.expander(f"🔧 {get_text('technical_info', st.session_state.language)}", expanded=False):
         st.json(diagnosis)
 
     # Liens utiles
-    st.subheader("🔗 Liens utiles")
+    st.subheader(f"🔗 {get_text('useful_links', st.session_state.language)}")
     col1, col2 = st.columns(2)
     with col1:
-        st.link_button("📊 Statut ValueSERP", "https://valueserp.statuspage.io/")
+        st.link_button(f"📊 {get_text('valueserp_status_page', st.session_state.language)}",
+                       "https://valueserp.statuspage.io/")
     with col2:
-        st.link_button("📧 Support ValueSERP", "https://www.valueserp.com/contact")
+        st.link_button(f"🔧 {get_text('valueserp_support', st.session_state.language)}",
+                       "https://www.valueserp.com/contact")

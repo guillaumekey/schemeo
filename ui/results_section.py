@@ -1,12 +1,13 @@
 """
 Module pour la section des résultats d'analyse
-Version corrigée avec gestion de la nouvelle structure de données
+Version corrigée avec gestion de la nouvelle structure de données - VERSION COMPLÈTE TRADUITE
 """
 import streamlit as st
 import pandas as pd
 import json
+import hashlib
 from config import Config
-from translations import get_text
+from translations import get_text, format_text
 from utils.helpers import (
     get_domain_from_url, get_schema_icon,
     generate_schema_report, create_download_button
@@ -76,24 +77,26 @@ def results_section():
     urls_analyzed = data.get('urls_analyzed', [])
 
     # Métriques principales
+    st.subheader(f"📊 {get_text('main_metrics', st.session_state.language)}")
+
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            label="URLs analysées",
+            label=get_text('urls_analyzed', st.session_state.language),
             value=len(urls_analyzed)
         )
 
     with col2:
         st.metric(
-            label="Types de schemas",
+            label=get_text('schema_types', st.session_state.language),
             value=len(analysis.get('schema_coverage', {}))
         )
 
     with col3:
         competitive_count = len(analysis.get('competitive_schemas', []))
         st.metric(
-            label="Schemas compétitifs",
+            label=get_text('competitive_schemas', st.session_state.language),
             value=competitive_count
         )
 
@@ -105,7 +108,7 @@ def results_section():
             avg_schemas = 0
 
         st.metric(
-            label="Schemas/page (moy.)",
+            label=get_text('avg_schemas_per_page', st.session_state.language),
             value=f"{avg_schemas:.1f}"
         )
 
@@ -118,44 +121,62 @@ def results_section():
         for schema_type, schema_data in analysis['schema_coverage'].items():
             coverage_data.append({
                 'Schema': f"{get_schema_icon(schema_type)} {schema_type}",
-                'Sites': schema_data.get('count', 0),
-                'Couverture': f"{schema_data.get('percentage', 0)}%",
-                'Positions': analysis.get('position_analysis', {}).get(schema_type, {}).get('positions', [])
+                get_text('websites', st.session_state.language): schema_data.get('count', 0),
+                get_text('coverage', st.session_state.language): f"{schema_data.get('percentage', 0)}%",
+                get_text('positions', st.session_state.language): analysis.get('position_analysis', {}).get(schema_type,
+                                                                                                            {}).get(
+                    'positions', [])
             })
 
         df = pd.DataFrame(coverage_data)
-        df = df.sort_values('Sites', ascending=False)
+        df = df.sort_values(get_text('websites', st.session_state.language), ascending=False)
 
         # Afficher le tableau
         st.dataframe(
-            df[['Schema', 'Sites', 'Couverture']],
+            df[['Schema', get_text('websites', st.session_state.language),
+                get_text('coverage', st.session_state.language)]],
             use_container_width=True,
             hide_index=True
         )
 
         # Graphique de distribution
-        if st.checkbox("Afficher le graphique"):
+        if st.checkbox(get_text('show_chart', st.session_state.language)):
             chart_data = pd.DataFrame({
                 'Schema': [d['Schema'] for d in coverage_data],
-                'Sites': [d['Sites'] for d in coverage_data]
+                get_text('websites', st.session_state.language): [d[get_text('websites', st.session_state.language)] for
+                                                                  d in coverage_data]
             })
             st.bar_chart(chart_data.set_index('Schema'))
 
     # NOUVELLE SECTION : Analyse détaillée par concurrent
     st.divider()
-    st.subheader("🔍 Analyse détaillée par concurrent")
+    st.subheader(f"🔍 {get_text('detailed_competitor_analysis', st.session_state.language)}")
 
     _display_competitor_analysis(data)
 
     # Télécharger le rapport
-    if st.button("💾 Télécharger le rapport"):
-        report = generate_schema_report(analysis, st.session_state.language)
-        create_download_button(
-            data=report,
-            filename=f"schema_analysis_{data.get('search_params', {}).get('keyword', 'analysis')}.md",
-            label="Télécharger le rapport (Markdown)",
-            file_type="text"
-        )
+    st.divider()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(f"💾 {get_text('download_report', st.session_state.language)}"):
+            report = generate_schema_report(analysis, st.session_state.language)
+            create_download_button(
+                data=report,
+                filename=f"schema_analysis_{data.get('search_params', {}).get('keyword', 'analysis')}.json",
+                label=get_text('download_report', st.session_state.language),
+                file_type="json"
+            )
+
+    with col2:
+        if st.button(f"📋 {get_text('download_report_markdown', st.session_state.language)}"):
+            report = generate_schema_report(analysis, st.session_state.language)
+            create_download_button(
+                data=report,
+                filename=f"schema_analysis_{data.get('search_params', {}).get('keyword', 'analysis')}.md",
+                label=get_text('download_report_markdown', st.session_state.language),
+                file_type="text"
+            )
 
 
 def _display_competitor_analysis(data):
@@ -163,19 +184,22 @@ def _display_competitor_analysis(data):
     urls_analyzed = data.get('urls_analyzed', [])
 
     if not urls_analyzed:
-        st.warning("Aucune donnée d'analyse disponible")
+        st.warning(get_text('no_analysis_data_available', st.session_state.language))
         return
 
     # Options d'affichage
+    st.subheader(f"⚙️ {get_text('display_options', st.session_state.language)}")
     col1, col2 = st.columns(2)
 
     with col1:
-        show_all_details = st.checkbox("🔍 Afficher tous les détails", value=False)
+        show_all_details = st.checkbox(f"🔍 {get_text('show_all_details', st.session_state.language)}", value=False)
 
     with col2:
+        filter_options = [get_text('all', st.session_state.language)] + list(
+            data.get('analysis', {}).get('schema_coverage', {}).keys())
         filter_schema = st.selectbox(
-            "🎯 Filtrer par schema",
-            options=['Tous'] + list(data.get('analysis', {}).get('schema_coverage', {}).keys()),
+            f"🎯 {get_text('filter_by_schema', st.session_state.language)}",
+            options=filter_options,
             index=0
         )
 
@@ -190,7 +214,7 @@ def _display_competitor_analysis(data):
         schemas = url_data.get('schemas', {})
 
         # Filtrage par schema si nécessaire
-        if filter_schema != 'Tous':
+        if filter_schema != get_text('all', st.session_state.language):
             if filter_schema not in schema_types:
                 continue
 
@@ -199,7 +223,7 @@ def _display_competitor_analysis(data):
             col1, col2, col3 = st.columns([0.5, 3, 1])
 
             with col1:
-                st.metric("Position", position)
+                st.metric(get_text('position', st.session_state.language), position)
 
             with col2:
                 st.write(f"**{domain}**")
@@ -207,9 +231,9 @@ def _display_competitor_analysis(data):
 
             with col3:
                 if schema_types:
-                    st.metric("Schemas", len(schema_types))
+                    st.metric(get_text('schemas', st.session_state.language), len(schema_types))
                 else:
-                    st.write("❌ Pas de schemas")
+                    st.write(f"❌ {get_text('no_schemas', st.session_state.language)}")
 
         if schema_types:
             # Affichage compact par défaut
@@ -220,10 +244,12 @@ def _display_competitor_analysis(data):
                     icon = get_schema_icon(schema_type)
                     schema_list.append(f"{icon} {schema_type}")
 
-                st.write("📋 **Schemas détectés :** " + " • ".join(schema_list))
+                st.write(
+                    f"📋 **{get_text('schemas_detected', st.session_state.language)} :** " + " • ".join(schema_list))
 
                 # Bouton pour voir les détails
-                if st.button(f"👁️ Voir le code des schemas", key=f"view_schemas_{position}"):
+                if st.button(f"👁️ {get_text('view_schema_code', st.session_state.language)}",
+                             key=f"view_schemas_{position}"):
                     st.session_state[f"show_schemas_{position}"] = not st.session_state.get(
                         f"show_schemas_{position}", False)
 
@@ -235,29 +261,37 @@ def _display_competitor_analysis(data):
 
 
 def _display_schemas_for_competitor(schemas, schema_types, position, filter_schema):
-    """Affiche les schemas détaillés pour un concurrent"""
+    """Affiche les schemas détaillés pour un concurrent - VERSION CORRIGÉE"""
 
     for schema_type in sorted(schema_types):
-        if filter_schema != 'Tous' and schema_type != filter_schema:
+        if filter_schema != get_text('all', st.session_state.language) and schema_type != filter_schema:
             continue
 
         # Récupérer les schemas de ce type
         matching_schemas = _get_schemas_by_type(schemas, schema_type)
 
         if matching_schemas:
+            instance_text = get_text('instance', st.session_state.language) if len(matching_schemas) == 1 else get_text(
+                'instances', st.session_state.language)
             with st.expander(
-                    f"{get_schema_icon(schema_type)} **{schema_type}** ({len(matching_schemas)} instance{'s' if len(matching_schemas) > 1 else ''})",
+                    f"{get_schema_icon(schema_type)} **{schema_type}** ({len(matching_schemas)} {instance_text})",
                     expanded=False):
 
                 if len(matching_schemas) > 1:
                     # Plusieurs instances - créer des sous-onglets
-                    sub_tabs = st.tabs([f"Instance {i + 1}" for i in range(len(matching_schemas))])
-                    for sub_tab, schema in zip(sub_tabs, matching_schemas):
+                    sub_tabs = st.tabs([f"{get_text('instance', st.session_state.language)} {i + 1}" for i in
+                                        range(len(matching_schemas))])
+                    for i, (sub_tab, schema) in enumerate(zip(sub_tabs, matching_schemas)):
                         with sub_tab:
-                            _display_single_schema_with_analysis(schema, schema_type, position, len(matching_schemas))
+                            # CORRECTION : Ajouter l'index du schema pour garantir l'unicité
+                            _display_single_schema_with_analysis(
+                                schema, schema_type, position, len(matching_schemas), schema_index=i
+                            )
                 else:
                     # Une seule instance
-                    _display_single_schema_with_analysis(matching_schemas[0], schema_type, position, 1)
+                    _display_single_schema_with_analysis(
+                        matching_schemas[0], schema_type, position, 1, schema_index=0
+                    )
 
 
 def _get_schemas_by_type(schemas, schema_type):
@@ -274,7 +308,15 @@ def _get_schemas_by_type(schemas, schema_type):
                     if isinstance(schema_types, str):
                         schema_types = [schema_types]
 
-                    if schema_type in schema_types:
+                    # Normaliser les types
+                    normalized_types = []
+                    for st_type in schema_types:
+                        if isinstance(st_type, str):
+                            # Extraire le nom du type (dernière partie après /)
+                            type_name = st_type.split('/')[-1] if '/' in st_type else st_type
+                            normalized_types.append(type_name)
+
+                    if schema_type in normalized_types:
                         matching_schemas.append(schema)
 
     return matching_schemas
@@ -289,7 +331,6 @@ def _display_single_schema_with_analysis(schema, schema_type, position, instance
     schema_url = schema.get('url', '')
 
     # Créer un hash unique basé sur le contenu pour éviter les doublons
-    import hashlib
     content_hash = hashlib.md5(json.dumps(schema, sort_keys=True).encode()).hexdigest()[:8]
 
     # Créer une clé vraiment unique
@@ -311,17 +352,18 @@ def _display_single_schema_with_analysis(schema, schema_type, position, instance
         # Extraire les informations clés du schema
         key_info = {}
         if 'name' in schema:
-            key_info['Nom'] = schema['name']
+            key_info[get_text('name', st.session_state.language)] = schema['name']
         if '@id' in schema:
-            key_info['ID'] = schema['@id']
+            key_info[get_text('id', st.session_state.language)] = schema['@id']
         if 'url' in schema:
             key_info['URL'] = schema['url']
         if 'description' in schema:
             description = str(schema['description'])
-            key_info['Description'] = description[:100] + "..." if len(description) > 100 else description
+            key_info[get_text('description_label', st.session_state.language)] = description[:100] + "..." if len(
+                description) > 100 else description
 
         if key_info:
-            st.write("**ℹ️ Informations clés :**")
+            st.write(f"**ℹ️ {get_text('key_information', st.session_state.language)} :**")
             for key, value in key_info.items():
                 st.write(f"• **{key}** : {value}")
 
@@ -331,83 +373,104 @@ def _display_single_schema_with_analysis(schema, schema_type, position, instance
         filled_fields = sum(1 for v in schema.values() if v not in [None, '', [], {}])
         completion = (filled_fields / total_fields * 100) if total_fields > 0 else 0
 
-        st.metric("Complétude", f"{completion:.0f}%")
-        st.caption(f"{filled_fields}/{total_fields} champs remplis")
+        st.metric(get_text('completion', st.session_state.language), f"{completion:.0f}%")
+        st.caption(
+            format_text('fields_filled_count', st.session_state.language, filled=filled_fields, total=total_fields))
 
     # Boutons d'action avec clés garanties uniques
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("📋 Copier le code", key=f"copy_{base_key}"):
+        if st.button(f"📋 {get_text('copy_code', st.session_state.language)}", key=f"copy_{base_key}"):
             # Code à copier (format prêt pour l'intégration)
             clean_code = {
                 "@context": "https://schema.org",
                 **schema
             }
             st.code(json.dumps(clean_code, indent=2, ensure_ascii=False), language='json')
-            st.success("Code prêt à copier !")
+            st.success(get_text('copy_ready_code', st.session_state.language))
 
     with col2:
-        analyze_label = "🔍 Masquer l'analyse" if st.session_state[analyze_key] else "🔍 Analyser"
+        analyze_label = f"🔍 {get_text('hide_analysis', st.session_state.language)}" if st.session_state[
+            analyze_key] else f"🔍 {get_text('show_analysis', st.session_state.language)}"
         if st.button(analyze_label, key=f"toggle_analysis_{base_key}"):
             st.session_state[analyze_key] = not st.session_state[analyze_key]
             st.rerun()
 
     with col3:
-        tips_label = "💡 Masquer les conseils" if st.session_state[tips_key] else "💡 Conseils"
+        tips_label = f"💡 {get_text('hide_tips', st.session_state.language)}" if st.session_state[
+            tips_key] else f"💡 {get_text('show_tips', st.session_state.language)}"
         if st.button(tips_label, key=f"toggle_tips_{base_key}"):
             st.session_state[tips_key] = not st.session_state[tips_key]
             st.rerun()
 
     # Affichage conditionnel des analyses
     if st.session_state[analyze_key]:
-        st.write("**🔍 Analyse du schema :**")
+        st.write(f"**🔍 {get_text('analysis_schema', st.session_state.language)} :**")
         _analyze_schema_completeness(schema, schema_type)
 
     if st.session_state[tips_key]:
-        st.write("**💡 Conseils d'optimisation :**")
+        st.write(f"**💡 {get_text('optimization_tips', st.session_state.language)} :**")
         _provide_schema_optimization_tips(schema, schema_type)
 
     # Code JSON complet
-    st.write("**📝 Code JSON-LD complet :**")
+    st.write(f"**📝 {get_text('complete_json_ld', st.session_state.language)} :**")
     st.code(json.dumps(schema, indent=2, ensure_ascii=False), language='json')
 
 
-def _display_schemas_for_competitor(schemas, schema_types, position, filter_schema):
-    """Affiche les schemas détaillés pour un concurrent - VERSION CORRIGÉE"""
+def _display_detailed_schemas_for_url(url_data, filter_schema=None):
+    """Affiche le code détaillé des schemas pour une URL"""
+    if filter_schema is None:
+        filter_schema = get_text('all', st.session_state.language)
 
-    for schema_type in sorted(schema_types):
-        if filter_schema != 'Tous' and schema_type != filter_schema:
-            continue
+    schemas_data = url_data.get('schemas', {})
+    position = url_data.get('position', 0)
 
-        # Récupérer les schemas de ce type
-        matching_schemas = _get_schemas_by_type(schemas, schema_type)
+    if not schemas_data:
+        st.warning(get_text('no_schema_data_available', st.session_state.language))
+        return
 
-        if matching_schemas:
-            with st.expander(
-                    f"{get_schema_icon(schema_type)} **{schema_type}** ({len(matching_schemas)} instance{'s' if len(matching_schemas) > 1 else ''})",
-                    expanded=False):
+    # Onglets pour différents types de données structurées
+    available_types = []
+    if schemas_data.get('json-ld'):
+        available_types.append("JSON-LD")
+    if schemas_data.get('microdata'):
+        available_types.append("Microdata")
+    if schemas_data.get('rdfa'):
+        available_types.append("RDFa")
+    if schemas_data.get('opengraph'):
+        available_types.append("OpenGraph")
 
-                if len(matching_schemas) > 1:
-                    # Plusieurs instances - créer des sous-onglets
-                    sub_tabs = st.tabs([f"Instance {i + 1}" for i in range(len(matching_schemas))])
-                    for i, (sub_tab, schema) in enumerate(zip(sub_tabs, matching_schemas)):
-                        with sub_tab:
-                            # CORRECTION : Ajouter l'index du schema pour garantir l'unicité
-                            _display_single_schema_with_analysis(
-                                schema, schema_type, position, len(matching_schemas), schema_index=i
-                            )
-                else:
-                    # Une seule instance
-                    _display_single_schema_with_analysis(
-                        matching_schemas[0], schema_type, position, 1, schema_index=0
-                    )
+    if not available_types:
+        st.warning(get_text('no_schema_found_data', st.session_state.language))
+        return
+
+    # Créer les onglets pour les différents formats
+    if len(available_types) > 1:
+        tabs = st.tabs(available_types)
+    else:
+        tabs = [st.container()]
+
+    for i, data_type in enumerate(available_types):
+        with tabs[i] if len(available_types) > 1 else tabs[0]:
+
+            if data_type == "JSON-LD":
+                _display_json_ld_schemas(schemas_data.get('json-ld', []), filter_schema, position)
+
+            elif data_type == "Microdata":
+                _display_microdata_schemas(schemas_data.get('microdata', []), filter_schema, position)
+
+            elif data_type == "RDFa":
+                _display_rdfa_schemas(schemas_data.get('rdfa', []), filter_schema, position)
+
+            elif data_type == "OpenGraph":
+                _display_opengraph_data(schemas_data.get('opengraph', []), position)
 
 
-def _display_json_ld_schemas(json_ld_data, filter_schema='Tous', position=0):
+def _display_json_ld_schemas(json_ld_data, filter_schema, position=0):
     """Affiche les schemas JSON-LD avec le code complet - VERSION CORRIGÉE"""
     if not json_ld_data:
-        st.info("Aucun schema JSON-LD trouvé")
+        st.info(get_text('no_json_ld_found', st.session_state.language))
         return
 
     # Regrouper les schemas par type avec index pour éviter les doublons
@@ -433,27 +496,33 @@ def _display_json_ld_schemas(json_ld_data, filter_schema='Tous', position=0):
                 schema_type = schema_type.split('/')[-1] if '/' in schema_type else schema_type
 
             # Appliquer le filtre
-            if filter_schema == 'Tous' or schema_type == filter_schema:
+            if filter_schema == get_text('all', st.session_state.language) or schema_type == filter_schema:
                 if schema_type not in schemas_by_type:
                     schemas_by_type[schema_type] = []
                 # CORRECTION : Stocker le schema avec son index original pour l'unicité
                 schemas_by_type[schema_type].append((schema, i))
 
     if not schemas_by_type:
-        st.info(f"Aucun schema JSON-LD trouvé" + (f" pour le type {filter_schema}" if filter_schema != 'Tous' else ""))
+        message = get_text('no_json_ld_found', st.session_state.language)
+        if filter_schema != get_text('all', st.session_state.language):
+            message += f" {get_text('for_type', st.session_state.language)} {filter_schema}"
+        st.info(message)
         return
 
     # Afficher chaque type de schema
     for schema_type, schema_list in sorted(schemas_by_type.items()):
 
         # En-tête du type de schema
+        instance_text = get_text('instance', st.session_state.language) if len(schema_list) == 1 else get_text(
+            'instances', st.session_state.language)
         with st.expander(
-                f"{get_schema_icon(schema_type)} **{schema_type}** ({len(schema_list)} instance{'s' if len(schema_list) > 1 else ''})",
+                f"{get_schema_icon(schema_type)} **{schema_type}** ({len(schema_list)} {instance_text})",
                 expanded=True):
 
             # Si plusieurs instances, créer des sous-onglets
             if len(schema_list) > 1:
-                sub_tabs = st.tabs([f"Instance {i + 1}" for i in range(len(schema_list))])
+                sub_tabs = st.tabs(
+                    [f"{get_text('instance', st.session_state.language)} {i + 1}" for i in range(len(schema_list))])
                 for tab_index, (sub_tab, (schema, original_index)) in enumerate(zip(sub_tabs, schema_list)):
                     with sub_tab:
                         # CORRECTION : Utiliser l'index original + l'index du tab pour l'unicité
@@ -501,17 +570,18 @@ def _display_single_schema_with_analysis_v2(schema, schema_type, position, insta
         # Extraire les informations clés du schema
         key_info = {}
         if 'name' in schema:
-            key_info['Nom'] = schema['name']
+            key_info[get_text('name', st.session_state.language)] = schema['name']
         if '@id' in schema:
-            key_info['ID'] = schema['@id']
+            key_info[get_text('id', st.session_state.language)] = schema['@id']
         if 'url' in schema:
             key_info['URL'] = schema['url']
         if 'description' in schema:
             description = str(schema['description'])
-            key_info['Description'] = description[:100] + "..." if len(description) > 100 else description
+            key_info[get_text('description_label', st.session_state.language)] = description[:100] + "..." if len(
+                description) > 100 else description
 
         if key_info:
-            st.write("**ℹ️ Informations clés :**")
+            st.write(f"**ℹ️ {get_text('key_information', st.session_state.language)} :**")
             for key, value in key_info.items():
                 st.write(f"• **{key}** : {value}")
 
@@ -521,48 +591,51 @@ def _display_single_schema_with_analysis_v2(schema, schema_type, position, insta
         filled_fields = sum(1 for v in schema.values() if v not in [None, '', [], {}])
         completion = (filled_fields / total_fields * 100) if total_fields > 0 else 0
 
-        st.metric("Complétude", f"{completion:.0f}%")
-        st.caption(f"{filled_fields}/{total_fields} champs remplis")
+        st.metric(get_text('completion', st.session_state.language), f"{completion:.0f}%")
+        st.caption(
+            format_text('fields_filled_count', st.session_state.language, filled=filled_fields, total=total_fields))
 
     # Boutons d'action avec clés uniques garanties
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("📋 Copier le code", key=get_unique_key("copy")):
+        if st.button(f"📋 {get_text('copy_code', st.session_state.language)}", key=get_unique_key("copy")):
             clean_code = {"@context": "https://schema.org", **schema}
             st.code(json.dumps(clean_code, indent=2, ensure_ascii=False), language='json')
-            st.success("Code prêt à copier !")
+            st.success(get_text('copy_ready_code', st.session_state.language))
 
     with col2:
-        analyze_label = "🔍 Masquer l'analyse" if st.session_state[analyze_key] else "🔍 Analyser"
+        analyze_label = f"🔍 {get_text('hide_analysis', st.session_state.language)}" if st.session_state[
+            analyze_key] else f"🔍 {get_text('show_analysis', st.session_state.language)}"
         if st.button(analyze_label, key=get_unique_key("analyze")):
             st.session_state[analyze_key] = not st.session_state[analyze_key]
             st.rerun()
 
     with col3:
-        tips_label = "💡 Masquer les conseils" if st.session_state[tips_key] else "💡 Conseils"
+        tips_label = f"💡 {get_text('hide_tips', st.session_state.language)}" if st.session_state[
+            tips_key] else f"💡 {get_text('show_tips', st.session_state.language)}"
         if st.button(tips_label, key=get_unique_key("tips")):
             st.session_state[tips_key] = not st.session_state[tips_key]
             st.rerun()
 
     # Affichage conditionnel
     if st.session_state[analyze_key]:
-        st.write("**🔍 Analyse du schema :**")
+        st.write(f"**🔍 {get_text('analysis_schema', st.session_state.language)} :**")
         _analyze_schema_completeness(schema, schema_type)
 
     if st.session_state[tips_key]:
-        st.write("**💡 Conseils d'optimisation :**")
+        st.write(f"**💡 {get_text('optimization_tips', st.session_state.language)} :**")
         _provide_schema_optimization_tips(schema, schema_type)
 
     # Code JSON complet
-    st.write("**📝 Code JSON-LD complet :**")
+    st.write(f"**📝 {get_text('complete_json_ld', st.session_state.language)} :**")
     st.code(json.dumps(schema, indent=2, ensure_ascii=False), language='json')
 
 
-def _display_microdata_schemas(microdata, filter_schema='Tous', position=0):
+def _display_microdata_schemas(microdata, filter_schema, position=0):
     """Affiche les schemas Microdata"""
     if not microdata:
-        st.info("Aucun schema Microdata trouvé")
+        st.info(get_text('no_microdata_found', st.session_state.language))
         return
 
     for i, schema in enumerate(microdata):
@@ -571,15 +644,15 @@ def _display_microdata_schemas(microdata, filter_schema='Tous', position=0):
             if isinstance(type_url, str) and 'schema.org' in type_url:
                 type_name = type_url.split('/')[-1]
                 if type_name in Config.STANDARD_SCHEMA_TYPES:
-                    if filter_schema == 'Tous' or type_name == filter_schema:
+                    if filter_schema == get_text('all', st.session_state.language) or type_name == filter_schema:
                         with st.expander(f"{get_schema_icon(type_name)} **{type_name}** (Microdata)", expanded=False):
                             st.code(json.dumps(schema, indent=2, ensure_ascii=False), language='json')
 
 
-def _display_rdfa_schemas(rdfa_data, filter_schema='Tous', position=0):
+def _display_rdfa_schemas(rdfa_data, filter_schema, position=0):
     """Affiche les schemas RDFa"""
     if not rdfa_data:
-        st.info("Aucun schema RDFa trouvé")
+        st.info(get_text('no_rdfa_found', st.session_state.language))
         return
 
     st.code(json.dumps(rdfa_data, indent=2, ensure_ascii=False), language='json')
@@ -588,7 +661,7 @@ def _display_rdfa_schemas(rdfa_data, filter_schema='Tous', position=0):
 def _display_opengraph_data(opengraph_data, position=0):
     """Affiche les données OpenGraph"""
     if not opengraph_data:
-        st.info("Aucune donnée OpenGraph trouvée")
+        st.info(get_text('no_opengraph_found', st.session_state.language))
         return
 
     st.code(json.dumps(opengraph_data, indent=2, ensure_ascii=False), language='json')
@@ -628,13 +701,13 @@ def _analyze_schema_completeness(schema, schema_type):
 
         with col1:
             if present_fields:
-                st.success("**✅ Champs présents :**")
+                st.success(f"**✅ {get_text('present_fields', st.session_state.language)} :**")
                 for field in present_fields:
                     st.write(f"• {field}")
 
         with col2:
             if missing_fields:
-                st.warning("**⚠️ Champs manquants :**")
+                st.warning(f"**⚠️ {get_text('missing_fields', st.session_state.language)} :**")
                 for field in missing_fields:
                     st.write(f"• {field}")
 
@@ -643,13 +716,13 @@ def _analyze_schema_completeness(schema, schema_type):
             schema_type] else 0
 
         if score >= 80:
-            st.success(f"🎉 Excellent schema ! Score : {score:.0f}%")
+            st.success(format_text('excellent_schema_score', st.session_state.language, score=int(score)))
         elif score >= 60:
-            st.warning(f"⚠️ Schema correct mais améliorable. Score : {score:.0f}%")
+            st.warning(format_text('good_schema_score', st.session_state.language, score=int(score)))
         else:
-            st.error(f"❌ Schema incomplet. Score : {score:.0f}%")
+            st.error(format_text('incomplete_schema_score', st.session_state.language, score=int(score)))
     else:
-        st.info("Analyse non disponible pour ce type de schema")
+        st.info(get_text('no_specific_analysis', st.session_state.language))
 
 
 def _provide_schema_optimization_tips(schema, schema_type):
@@ -657,52 +730,52 @@ def _provide_schema_optimization_tips(schema, schema_type):
 
     tips = {
         'Organization': [
-            "Ajoutez un logo en haute résolution (min 600x60px)",
-            "Incluez les réseaux sociaux dans 'sameAs'",
-            "Précisez l'adresse complète avec coordonnées GPS",
-            "Ajoutez les informations de contact détaillées"
+            get_text('org_tip_logo_hires', st.session_state.language),
+            get_text('org_tip_social_networks', st.session_state.language),
+            get_text('org_tip_address_gps', st.session_state.language),
+            get_text('org_tip_contact_details', st.session_state.language)
         ],
         'LocalBusiness': [
-            "Spécifiez les horaires d'ouverture détaillés",
-            "Ajoutez des photos de qualité",
-            "Incluez la gamme de prix (priceRange)",
-            "Précisez le type d'entreprise locale spécifique"
+            get_text('local_tip_opening_hours', st.session_state.language),
+            get_text('local_tip_quality_photos', st.session_state.language),
+            get_text('local_tip_price_range', st.session_state.language),
+            get_text('local_tip_business_type', st.session_state.language)
         ],
         'Product': [
-            "Utilisez des images en haute résolution (min 800x600px)",
-            "Ajoutez des avis et notes (aggregateRating)",
-            "Spécifiez la marque et le modèle",
-            "Incluez les informations de disponibilité et prix"
+            get_text('product_tip_hires_images', st.session_state.language),
+            get_text('product_tip_aggregate_rating', st.session_state.language),
+            get_text('product_tip_brand_model', st.session_state.language),
+            get_text('product_tip_availability_price', st.session_state.language)
         ],
         'Article': [
-            "Ajoutez des images d'au moins 1200x675px",
-            "Spécifiez l'auteur avec ses informations complètes",
-            "Incluez la date de publication et de modification",
-            "Ajoutez le temps de lecture estimé"
+            get_text('article_tip_large_image', st.session_state.language),
+            get_text('article_tip_author_info', st.session_state.language),
+            get_text('article_tip_publish_dates', st.session_state.language),
+            get_text('article_tip_reading_time', st.session_state.language)
         ],
         'WebPage': [
-            "Ajoutez une description meta attractive",
-            "Incluez des fils d'Ariane (breadcrumb)",
-            "Spécifiez l'entité principale de la page",
-            "Utilisez des URLs canoniques"
+            get_text('webpage_tip_meta_description', st.session_state.language),
+            get_text('webpage_tip_breadcrumbs', st.session_state.language),
+            get_text('webpage_tip_main_entity', st.session_state.language),
+            get_text('webpage_tip_canonical_urls', st.session_state.language)
         ],
         'WebSite': [
-            "Configurez la recherche interne (potentialAction)",
-            "Ajoutez des liens vers les profils sociaux",
-            "Précisez l'organisation propriétaire",
-            "Incluez une description du site"
+            get_text('website_tip_internal_search', st.session_state.language),
+            get_text('website_tip_social_links', st.session_state.language),
+            get_text('website_tip_organization_owner', st.session_state.language),
+            get_text('website_tip_site_description', st.session_state.language)
         ],
         'ImageObject': [
-            "Spécifiez les dimensions exactes (width/height)",
-            "Indiquez le format d'encodage (JPEG, PNG, WebP)",
-            "Ajoutez une description alt pertinente",
-            "Utilisez des URLs d'images absolues"
+            get_text('image_tip_exact_dimensions', st.session_state.language),
+            get_text('image_tip_encoding_format', st.session_state.language),
+            get_text('image_tip_alt_description', st.session_state.language),
+            get_text('image_tip_absolute_urls', st.session_state.language)
         ],
         'BreadcrumbList': [
-            "Structurez correctement la hiérarchie",
-            "Utilisez des URLs absolues pour chaque niveau",
-            "Incluez la page actuelle dans la liste",
-            "Respectez l'ordre logique de navigation"
+            get_text('breadcrumb_tip_hierarchy', st.session_state.language),
+            get_text('breadcrumb_tip_absolute_urls', st.session_state.language),
+            get_text('breadcrumb_tip_current_page', st.session_state.language),
+            get_text('breadcrumb_tip_logical_order', st.session_state.language)
         ]
     }
 
@@ -710,170 +783,14 @@ def _provide_schema_optimization_tips(schema, schema_type):
         for tip in tips[schema_type]:
             st.write(f"💡 {tip}")
     else:
-        st.write("💡 Assurez-vous que tous les champs obligatoires sont remplis")
-        st.write("💡 Utilisez des données spécifiques et détaillées")
-        st.write("💡 Vérifiez la cohérence avec le contenu de la page")
-        st.write("💡 Testez avec Google Rich Results Test")
+        st.write(f"💡 {get_text('tip_required_fields', st.session_state.language)}")
+        st.write(f"💡 {get_text('tip_specific_data', st.session_state.language)}")
+        st.write(f"💡 {get_text('tip_content_consistency', st.session_state.language)}")
+        st.write(f"💡 {get_text('tip_google_test', st.session_state.language)}")
 
     # Conseils généraux
-    st.write("**📌 Conseils généraux :**")
-    st.write("• Mettez à jour régulièrement vos données")
-    st.write("• Évitez les informations en double")
-    st.write("• Utilisez des URLs absolues")
-    st.write("• Testez avec les outils de validation Google")
-
-
-def _get_schemas_by_type(schemas, schema_type):
-    """Récupère les schemas d'un type donné"""
-    matching_schemas = []
-
-    # Parcourir tous les schemas
-    for key, schema_list in schemas.items():
-        if isinstance(schema_list, list):
-            for schema in schema_list:
-                if isinstance(schema, dict):
-                    # Vérifier le @type
-                    schema_types = schema.get('@type', [])
-                    if isinstance(schema_types, str):
-                        schema_types = [schema_types]
-
-                    # Normaliser les types
-                    normalized_types = []
-                    for st_type in schema_types:
-                        if isinstance(st_type, str):
-                            # Extraire le nom du type (dernière partie après /)
-                            type_name = st_type.split('/')[-1] if '/' in st_type else st_type
-                            normalized_types.append(type_name)
-
-                    if schema_type in normalized_types:
-                        matching_schemas.append(schema)
-
-    return matching_schemas
-
-
-def _display_schemas_for_competitor(schemas, schema_types, position, filter_schema):
-    """Affiche les schemas détaillés pour un concurrent"""
-
-    for schema_type in sorted(schema_types):
-        if filter_schema != 'Tous' and schema_type != filter_schema:
-            continue
-
-        # Récupérer les schemas de ce type
-        matching_schemas = _get_schemas_by_type(schemas, schema_type)
-
-        if matching_schemas:
-            with st.expander(
-                    f"{get_schema_icon(schema_type)} **{schema_type}** ({len(matching_schemas)} instance{'s' if len(matching_schemas) > 1 else ''})",
-                    expanded=False):
-
-                if len(matching_schemas) > 1:
-                    # Plusieurs instances - créer des sous-onglets
-                    sub_tabs = st.tabs([f"Instance {i + 1}" for i in range(len(matching_schemas))])
-                    for sub_tab, schema in zip(sub_tabs, matching_schemas):
-                        with sub_tab:
-                            _display_single_schema_with_analysis(schema, schema_type, position, len(matching_schemas))
-                else:
-                    # Une seule instance
-                    _display_single_schema_with_analysis(matching_schemas[0], schema_type, position, 1)
-
-
-def _display_detailed_schemas_for_url(url_data, filter_schema='Tous'):
-    """Affiche le code détaillé des schemas pour une URL"""
-    schemas_data = url_data.get('schemas', {})
-    position = url_data.get('position', 0)
-
-    if not schemas_data:
-        st.warning("Aucune donnée de schema disponible")
-        return
-
-    # Onglets pour différents types de données structurées
-    available_types = []
-    if schemas_data.get('json-ld'):
-        available_types.append("JSON-LD")
-    if schemas_data.get('microdata'):
-        available_types.append("Microdata")
-    if schemas_data.get('rdfa'):
-        available_types.append("RDFa")
-    if schemas_data.get('opengraph'):
-        available_types.append("OpenGraph")
-
-    if not available_types:
-        st.warning("Aucun schema trouvé dans les données")
-        return
-
-    # Créer les onglets pour les différents formats
-    if len(available_types) > 1:
-        tabs = st.tabs(available_types)
-    else:
-        tabs = [st.container()]
-
-    for i, data_type in enumerate(available_types):
-        with tabs[i] if len(available_types) > 1 else tabs[0]:
-
-            if data_type == "JSON-LD":
-                _display_json_ld_schemas(schemas_data.get('json-ld', []), filter_schema, position)
-
-            elif data_type == "Microdata":
-                _display_microdata_schemas(schemas_data.get('microdata', []), filter_schema, position)
-
-            elif data_type == "RDFa":
-                _display_rdfa_schemas(schemas_data.get('rdfa', []), filter_schema, position)
-
-            elif data_type == "OpenGraph":
-                _display_opengraph_data(schemas_data.get('opengraph', []), position)
-
-
-def _display_json_ld_schemas(json_ld_data, filter_schema='Tous', position=0):
-    """Affiche les schemas JSON-LD avec le code complet"""
-    if not json_ld_data:
-        st.info("Aucun schema JSON-LD trouvé")
-        return
-
-    # Regrouper les schemas par type
-    schemas_by_type = {}
-    for i, schema in enumerate(json_ld_data):
-        if '@type' in schema:
-            schema_type = schema['@type']
-
-            # Gérer le cas où @type est une liste
-            if isinstance(schema_type, list):
-                # Prendre le premier type ou chercher un type standard
-                for t in schema_type:
-                    # Normaliser le type
-                    type_name = t.split('/')[-1] if '/' in t else t
-                    if hasattr(Config, 'STANDARD_SCHEMA_TYPES') and type_name in Config.STANDARD_SCHEMA_TYPES:
-                        schema_type = type_name
-                        break
-                else:
-                    # Si aucun type standard trouvé, prendre le premier
-                    schema_type = schema_type[0].split('/')[-1] if '/' in schema_type[0] else schema_type[0]
-            else:
-                # Normaliser le type simple
-                schema_type = schema_type.split('/')[-1] if '/' in schema_type else schema_type
-
-            # Appliquer le filtre
-            if filter_schema == 'Tous' or schema_type == filter_schema:
-                if schema_type not in schemas_by_type:
-                    schemas_by_type[schema_type] = []
-                schemas_by_type[schema_type].append(schema)
-
-    if not schemas_by_type:
-        st.info(f"Aucun schema JSON-LD trouvé" + (f" pour le type {filter_schema}" if filter_schema != 'Tous' else ""))
-        return
-
-    # Afficher chaque type de schema
-    for schema_type, schemas_list in sorted(schemas_by_type.items()):
-
-        # En-tête du type de schema
-        with st.expander(
-                f"{get_schema_icon(schema_type)} **{schema_type}** ({len(schemas_list)} instance{'s' if len(schemas_list) > 1 else ''})",
-                expanded=True):
-
-            # Si plusieurs instances, créer des sous-onglets
-            if len(schemas_list) > 1:
-                sub_tabs = st.tabs([f"Instance {i + 1}" for i in range(len(schemas_list))])
-                for i, (sub_tab, schema) in enumerate(zip(sub_tabs, schemas_list)):
-                    with sub_tab:
-                        _display_single_schema_with_analysis(schema, schema_type, position, i + 1)
-            else:
-                _display_single_schema_with_analysis(schemas_list[0], schema_type, position, 1)
+    st.write(f"**📌 {get_text('general_tips', st.session_state.language)} :**")
+    st.write(f"• {get_text('tip_update_regularly', st.session_state.language)}")
+    st.write(f"• {get_text('tip_avoid_duplicates', st.session_state.language)}")
+    st.write(f"• {get_text('tip_use_absolute_urls', st.session_state.language)}")
+    st.write(f"• {get_text('tip_test_google_tools', st.session_state.language)}")

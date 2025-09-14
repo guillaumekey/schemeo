@@ -314,12 +314,13 @@ def generator_section():
 
     # BreadcrumbList
     if 'BreadcrumbList' in selected_schemas:
-        breadcrumb_data = render_breadcrumb_form()
+        breadcrumb_data = render_breadcrumb_form(website)
         additional_data.update(breadcrumb_data)
 
     # JobPosting
     if 'JobPosting' in selected_schemas:
-        job_data = render_job_posting_form()
+        temp_generator = SchemaGenerator()
+        job_data = render_job_posting_form(temp_generator)
         additional_data.update(job_data)
 
     # Service
