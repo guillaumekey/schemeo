@@ -20,6 +20,49 @@ class SchemaAnalyzer:
             'Organization': ['ContactPoint', 'PostalAddress', 'Logo']
         }
 
+    def analyze_page_schemas(self, schemas: Dict, schema_types: Set) -> Dict:
+        """
+        Analyse les schemas d'une page individuelle
+
+        Args:
+            schemas: Dictionnaire des schemas extraits
+            schema_types: Set des types de schemas trouvés
+
+        Returns:
+            Analyse de la page
+        """
+        analysis = {
+            'total_schemas': 0,
+            'schema_types_found': list(schema_types),
+            'schema_distribution': {},
+            'optimization_score': 0,
+            'recommendations': []
+        }
+
+        # Compter le total de schemas
+        for format_type, schema_list in schemas.items():
+            if isinstance(schema_list, list):
+                count = len(schema_list)
+                analysis['total_schemas'] += count
+                analysis['schema_distribution'][format_type] = count
+
+        # Calculer un score d'optimisation basique (sur 100)
+        priority_found = len([t for t in schema_types if t in ['Organization', 'LocalBusiness', 'WebSite', 'WebPage']])
+        analysis['optimization_score'] = min(100, (priority_found * 25) + (len(schema_types) * 5))
+
+        # Générer des recommandations basiques
+        if 'Organization' not in schema_types:
+            analysis['recommendations'].append(
+                'Ajouter un schema Organization pour améliorer la visibilité de votre marque')
+
+        if 'BreadcrumbList' not in schema_types:
+            analysis['recommendations'].append('Ajouter un schema BreadcrumbList pour améliorer la navigation')
+
+        if analysis['total_schemas'] == 0:
+            analysis['recommendations'].append('Aucun schema détecté - commencez par ajouter des schemas de base')
+
+        return analysis
+
     def analyze_serp_schemas(self, serp_results: Dict) -> Dict:
         """
         Analyse les schemas trouvés dans les résultats SERP

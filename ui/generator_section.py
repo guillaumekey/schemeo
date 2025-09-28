@@ -1,9 +1,11 @@
 """
-Module pour la section de génération de schemas - Version optimisée sans doublons
+Section de génération de schemas avec fonctionnalité de test intégrée
+Version corrigée sans erreurs de syntaxe
 """
-import streamlit as st
+
 import json
-from typing import List, Dict  # AJOUT DE L'IMPORT MANQUANT
+import streamlit as st
+from datetime import datetime, timedelta
 from translations import get_text
 from generators.schema_generator import SchemaGenerator
 from generators.schema_deduplication_manager import SchemaDeduplicationManager, SchemaGeneratorOptimized
@@ -27,52 +29,604 @@ from ui.generator_forms import (
     render_review_form,
     render_aggregate_rating_form
 )
-from ui.generator_utils import (
-    display_schema_preview,
-    generate_wordpress_code,
-    generate_implementation_doc
-)
 
 
-def _ensure_reviewable_item_exists(self, schemas: List[Dict],
-                                   client_info: Dict,
-                                   additional_data: Dict) -> List[Dict]:
-    """
-    S'assure qu'un élément reviewable existe pour chaque Review
-    """
-    has_review = any(s.get('@type') == 'Review' for s in schemas)
+class TestDataGenerator:
+    """Classe pour générer des données de test pour tous les types de schemas"""
 
-    if has_review:
-        # Chercher si on a un Service, Product, etc.
-        reviewable_types = ['Service', 'Product', 'LocalBusiness', 'Restaurant', 'Organization']
-        has_reviewable = any(
-            s.get('@type') in reviewable_types or
-            (isinstance(s.get('@type'), list) and any(t in reviewable_types for t in s['@type']))
-            for s in schemas
+    @staticmethod
+    def get_test_data_for_schema(schema_type):
+        """Retourne des données de test pour un type de schema donné"""
+
+        test_data_map = {
+            'Organization': TestDataGenerator._get_organization_test_data(),
+            'LocalBusiness': TestDataGenerator._get_local_business_test_data(),
+            'Restaurant': TestDataGenerator._get_restaurant_test_data(),
+            'Store': TestDataGenerator._get_store_test_data(),
+            'Product': TestDataGenerator._get_product_test_data(),
+            'Article': TestDataGenerator._get_article_test_data(),
+            'NewsArticle': TestDataGenerator._get_news_article_test_data(),
+            'BlogPosting': TestDataGenerator._get_blog_posting_test_data(),
+            'Review': TestDataGenerator._get_review_test_data(),
+            'AggregateRating': TestDataGenerator._get_aggregate_rating_test_data(),
+            'Recipe': TestDataGenerator._get_recipe_test_data(),
+            'VideoObject': TestDataGenerator._get_video_object_test_data(),
+            'Event': TestDataGenerator._get_event_test_data(),
+            'Course': TestDataGenerator._get_course_test_data(),
+            'WebSite': TestDataGenerator._get_website_test_data(),
+            'BreadcrumbList': TestDataGenerator._get_breadcrumb_test_data(),
+            'FAQPage': TestDataGenerator._get_faq_test_data(),
+            'Person': TestDataGenerator._get_person_test_data(),
+            'JobPosting': TestDataGenerator._get_job_posting_test_data(),
+            'Service': TestDataGenerator._get_service_test_data(),
+            'SoftwareApplication': TestDataGenerator._get_software_application_test_data(),
+            'HowTo': TestDataGenerator._get_howto_test_data()
+        }
+
+        return test_data_map.get(schema_type, {})
+
+    @staticmethod
+    def _get_organization_test_data():
+        return {
+            # Informations de base
+            'company_name': 'Agence WebTech Solutions',
+            'description': 'Agence spécialisée dans le développement web et le marketing digital. Nous accompagnons les entreprises dans leur transformation numérique.',
+            'website': 'https://webtech-solutions.com',
+            'logo': 'https://webtech-solutions.com/logo.png',
+
+            # Informations business
+            'taxID': '12345678901234',
+            'vatID': 'FR12345678901',
+            'naics': '541511',
+            'employee_count': 25,
+            'slogan': 'Votre partenaire digital de confiance',
+
+            # Contact principal
+            'telephone': '+33 1 23 45 67 89',
+            'email': 'contact@webtech-solutions.com',
+            'fax': '+33 1 23 45 67 90',
+
+            # Adresse
+            'street_address': '123 Avenue des Champs-Élysées',
+            'city': 'Paris',
+            'postal_code': '75008',
+            'region': 'Île-de-France',
+            'country': 'FR',
+
+            # Réseaux sociaux
+            'facebook': 'https://facebook.com/webtechsolutions',
+            'linkedin': 'https://linkedin.com/company/webtech-solutions',
+            'twitter': 'https://twitter.com/webtechsolutions',
+            'instagram': 'https://instagram.com/webtechsolutions',
+            'youtube': 'https://youtube.com/webtechsolutions',
+            'tiktok': 'https://tiktok.com/@webtechsolutions',
+            'pinterest': 'https://pinterest.com/webtechsolutions'
+        }
+
+    @staticmethod
+    def _get_local_business_test_data():
+        base_data = TestDataGenerator._get_organization_test_data()
+        base_data.update({
+            # Informations LocalBusiness spécifiques
+            'price_range': '€€',
+            'opening_hours': 'Mo-Fr 09:00-18:00',
+            'payment_accepted': 'Cash, Credit Card, Debit Card, PayPal',
+            'currencies_accepted': 'EUR, USD',
+            'latitude': '48.8738',
+            'longitude': '2.2950'
+        })
+        return base_data
+
+    @staticmethod
+    def _get_restaurant_test_data():
+        base_data = TestDataGenerator._get_local_business_test_data()
+        base_data.update({
+            'company_name': 'Restaurant Le Petit Gourmet',
+            'description': 'Restaurant gastronomique français proposant une cuisine traditionnelle.',
+            'cuisines': ['Française', 'Européenne'],
+            'menu_url': 'https://lepetitgourmet.com/menu',
+            'accepts_reservations': True
+        })
+        return base_data
+
+    @staticmethod
+    def _get_store_test_data():
+        base_data = TestDataGenerator._get_local_business_test_data()
+        base_data.update({
+            'company_name': 'Boutique Mode & Style',
+            'description': 'Boutique de mode proposant des vêtements tendance.',
+        })
+        return base_data
+
+    @staticmethod
+    def _get_product_test_data():
+        return {
+            'product_name': 'MacBook Pro 16 pouces',
+            'product_description': 'Ordinateur portable professionnel Apple avec processeur M3 Pro, 18 Go de RAM et 512 Go de stockage SSD.',
+            'brand_name': 'Apple',
+            'sku': 'MBP16-M3-512',
+            'gtin13': '194252056813',
+            'mpn': 'MK1E3FN/A',
+            'price': '2899',
+            'currency': 'EUR',
+            'availability': 'https://schema.org/InStock',
+            'price_valid_until': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
+            'color': 'Gris sidéral',
+            'size': '16 pouces',
+            'material': 'Aluminium',
+            'weight_value': '2.1',
+            'weight_unit': 'KGM',
+            # Images produit
+            'product_img_0': 'https://example.com/macbook-pro-16.jpg',
+            'product_img_1': 'https://example.com/macbook-pro-16-2.jpg',
+            'product_img_2': 'https://example.com/macbook-pro-16-3.jpg'
+        }
+
+    @staticmethod
+    def _get_article_test_data():
+        return {
+            'headline': 'Comment optimiser le SEO de votre site web en 2024',
+            'article_description': 'Guide complet pour améliorer le référencement naturel de votre site web avec les dernières bonnes pratiques SEO.',
+            'author_name': 'Sophie Martin',
+            'author_url': 'https://webtech-solutions.com/author/sophie-martin',
+            'publisher_name': 'Blog WebTech',
+            'publisher_logo': 'https://webtech-solutions.com/logo.png',
+            'article_section': 'SEO',
+            'keywords': 'SEO, référencement, optimisation, Google',
+            'article_body': 'Dans cet article complet, nous explorerons les meilleures pratiques SEO pour 2024, en couvrant l\'optimisation technique, le contenu de qualité, et les stratégies de netlinking...',
+            # Images multiples formats
+            'img_16_9': 'https://example.com/seo-guide-2024-16x9.jpg',
+            'img_4_3': 'https://example.com/seo-guide-2024-4x3.jpg',
+            'img_1_1': 'https://example.com/seo-guide-2024-1x1.jpg'
+        }
+
+    @staticmethod
+    def _get_news_article_test_data():
+        base_data = TestDataGenerator._get_article_test_data()
+        base_data.update({
+            'headline': 'Google met à jour son algorithme de recherche',
+            'article_section': 'Technologie'
+        })
+        return base_data
+
+    @staticmethod
+    def _get_blog_posting_test_data():
+        base_data = TestDataGenerator._get_article_test_data()
+        base_data.update({
+            'headline': '10 astuces pour améliorer la vitesse de votre site web'
+        })
+        return base_data
+
+    @staticmethod
+    def _get_review_test_data():
+        return {
+            'review_type': 'Service',
+            'itemreviewed_name': 'Service de développement web',
+            'review_rating': '5',
+            'review_author': 'Marc Dubois',
+            'review_text': 'Excellent service ! Je recommande vivement.',
+            'review_summary': 'Service exceptionnel',
+            'would_recommend': True
+        }
+
+    @staticmethod
+    def _get_aggregate_rating_test_data():
+        return {
+            'target_type': 'Service',
+            'target_name': 'Service de développement web',
+            'rating_value': '4.8',
+            'best_rating': '5',
+            'worst_rating': '1',
+            'review_count': '127'
+        }
+
+    @staticmethod
+    def _get_recipe_test_data():
+        return {
+            'recipe_name': 'Tarte aux pommes traditionnelle',
+            'recipe_description': 'Une délicieuse tarte aux pommes faite maison.',
+            'prep_time': 'PT30M',
+            'cook_time': 'PT45M',
+            'recipe_yield': '8',
+            'recipe_category': 'Dessert',
+            'recipe_cuisine': 'Française',
+            'recipe_ingredients': 'Pâte brisée\n6 pommes\n100g de sucre\n50g de beurre\n1 œuf\nCannelle',
+            'recipe_instructions': '1. Préchauffer le four à 180°C\n2. Étaler la pâte dans un moule\n3. Éplucher et couper les pommes\n4. Disposer les pommes sur la pâte\n5. Saupoudrer de sucre et cannelle\n6. Cuire 45 minutes'
+        }
+
+    @staticmethod
+    def _get_video_object_test_data():
+        return {
+            'video_name': 'Tutoriel : Comment créer un site web professionnel',
+            'video_description': 'Apprenez à créer un site web professionnel étape par étape.',
+            'video_duration': 'PT15M30S',
+            'video_thumbnail_url': 'https://example.com/video-thumbnail.jpg',
+            'content_url': 'https://example.com/video.mp4',
+            'embed_url': 'https://example.com/embed/video123'
+        }
+
+    @staticmethod
+    def _get_event_test_data():
+        return {
+            'event_name': 'Conférence Web Marketing 2024',
+            'event_description': 'Conférence dédiée aux dernières tendances du marketing digital.',
+            'venue_name': 'Palais des Congrès',
+            'venue_address': '2 Place de la Porte Maillot, 75017 Paris',
+            'organizer_name': 'WebTech Events',
+            'ticket_price': '150',
+            'ticket_currency': 'EUR'
+        }
+
+    @staticmethod
+    def _get_course_test_data():
+        return {
+            'course_name': 'Formation SEO Avancé',
+            'course_description': 'Formation complète pour maîtriser les techniques avancées de référencement.',
+            'provider_name': 'WebTech Academy'
+        }
+
+    @staticmethod
+    def _get_website_test_data():
+        return {
+            'site_name': 'WebTech Solutions',
+            'alternate_name': 'WTS',
+            'site_description': 'Agence web spécialisée dans le développement et le marketing digital',
+            'potential_action': True,
+            'search_target': 'https://webtech-solutions.com/search?q={search_term_string}',
+            'search_term': 'search_term_string'
+        }
+
+    @staticmethod
+    def _get_breadcrumb_test_data():
+        return {
+            # Breadcrumb avec format individuel
+            'crumb_name_0': 'Accueil',
+            'crumb_url_0': 'https://webtech-solutions.com',
+            'crumb_name_1': 'Services',
+            'crumb_url_1': 'https://webtech-solutions.com/services',
+            'crumb_name_2': 'Développement Web',
+            'crumb_url_2': 'https://webtech-solutions.com/services/developpement-web',
+            'crumb_name_3': 'E-commerce',
+            'crumb_url_3': 'https://webtech-solutions.com/services/developpement-web/e-commerce'
+        }
+
+    @staticmethod
+    def _get_faq_test_data():
+        return {
+            # Questions FAQ avec format correct
+            'question_0': 'Combien coûte un site web ?',
+            'answer_0': 'Le prix varie selon la complexité et les fonctionnalités souhaitées. Pour un site vitrine, comptez entre 2000€ et 5000€. Pour un e-commerce, entre 5000€ et 15000€. Contactez-nous pour un devis personnalisé.',
+
+            'question_1': 'Combien de temps faut-il pour créer un site web ?',
+            'answer_1': 'En moyenne, il faut 4 à 8 semaines selon la complexité du projet. Un site vitrine prend 3-4 semaines, tandis qu\'un e-commerce peut nécessiter 6-10 semaines.',
+
+            'question_2': 'Proposez-vous la maintenance ?',
+            'answer_2': 'Oui, nous proposons des contrats de maintenance mensuels pour assurer la sécurité, les mises à jour et les sauvegardes de votre site web.',
+
+            'question_3': 'Travaillez-vous avec des CMS spécifiques ?',
+            'answer_3': 'Nous travaillons principalement avec WordPress, Shopify pour l\'e-commerce, et développons aussi des solutions sur mesure selon vos besoins.'
+        }
+
+    @staticmethod
+    def _get_person_test_data():
+        return {
+            'given_name': 'Sophie',
+            'family_name': 'Martin',
+            'job_title': 'Directrice Marketing Digital',
+            'person_description': 'Expert en marketing digital avec plus de 10 ans d\'expérience.',
+            'works_for': 'Agence WebTech Solutions'
+        }
+
+    @staticmethod
+    def _get_job_posting_test_data():
+        return {
+            'job_title': 'Développeur Full Stack Senior',
+            'job_description': 'Nous recherchons un développeur full stack expérimenté.',
+            'employment_type': 'FULL_TIME',
+            'job_city': 'Paris',
+            'job_country': 'FR',
+            'salary_min': '45000',
+            'salary_max': '65000',
+            'salary_currency': 'EUR'
+        }
+
+    @staticmethod
+    def _get_service_test_data():
+        return {
+            'service_name': 'Développement d\'applications web',
+            'service_description': 'Conception et développement d\'applications web sur mesure.',
+            'service_type': 'Web Development',
+            'area_served': ['France', 'Europe'],
+            'price_range': '€€€'
+        }
+
+    @staticmethod
+    def _get_software_application_test_data():
+        return {
+            'app_name': 'TaskManager Pro',
+            'app_category': 'ProductivityApplication',
+            'app_subcategory': 'Task Management',
+            'operating_systems': ['Windows', 'macOS', 'Web'],
+            'software_version': '2.1.0',
+            'pricing_model': 'Freemium'
+        }
+
+    @staticmethod
+    def _get_howto_test_data():
+        return {
+            'howto_name': 'Comment optimiser la vitesse de votre site web',
+            'total_time': 'PT2H',
+            'estimated_cost': '0',
+            'tools': 'Google PageSpeed Insights\nGTmetrix\nCompresseur d\'images\nÉditeur de code',
+            'supplies': 'Accès FTP au site\nSauvegarde du site\nCompte Google Analytics',
+            # Étapes individuelles
+            'step_name_0': 'Analyser les performances actuelles',
+            'step_text_0': 'Utilisez Google PageSpeed Insights pour analyser votre site et identifier les problèmes de performance.',
+            'step_img_0': 'https://example.com/step1-pagespeed.jpg',
+
+            'step_name_1': 'Optimiser les images',
+            'step_text_1': 'Compressez toutes les images de votre site et convertissez-les au format WebP pour réduire leur taille.',
+            'step_img_1': 'https://example.com/step2-images.jpg',
+
+            'step_name_2': 'Minifier CSS et JavaScript',
+            'step_text_2': 'Supprimez les espaces et commentaires inutiles de vos fichiers CSS et JS pour réduire leur taille.',
+            'step_img_2': 'https://example.com/step3-minify.jpg'
+        }
+
+    @staticmethod
+    def apply_test_data_to_session_state(selected_schemas):
+        """Applique les données de test à la session state pour les schémas sélectionnés"""
+
+        # Données de base communes
+        base_test_data = TestDataGenerator._get_organization_test_data()
+
+        # Parcourir chaque schéma sélectionné et ajouter ses données de test
+        for schema_type in selected_schemas:
+            schema_test_data = TestDataGenerator.get_test_data_for_schema(schema_type)
+
+            # Mettre à jour la session state avec les données de test
+            for key, value in schema_test_data.items():
+                st.session_state[key] = value
+
+        # S'assurer que les données de base sont aussi dans la session state
+        for key, value in base_test_data.items():
+            if key not in st.session_state:
+                st.session_state[key] = value
+
+    @staticmethod
+    def populate_form_fields_with_test_data(selected_schemas):
+        """Remplit les champs de formulaire avec des données de test"""
+        TestDataGenerator.apply_test_data_to_session_state(selected_schemas)
+        return len(selected_schemas)
+
+
+def render_optimization_analysis(selected_schemas, enable_deduplication):
+    """Affiche l'analyse d'optimisation pour les schemas sélectionnés"""
+    if not enable_deduplication or len(selected_schemas) < 2:
+        return
+
+    st.info("🔄 **Analyse d'optimisation activée**")
+
+    # Analyser les optimisations possibles
+    optimizations = []
+
+    # Vérifier si Review/AggregateRating peuvent être intégrés
+    if 'Review' in selected_schemas and any(
+            s in selected_schemas for s in ['Organization', 'LocalBusiness', 'Service']):
+        optimizations.append("✅ Review sera intégré dans Organization/LocalBusiness/Service")
+
+    if 'AggregateRating' in selected_schemas and any(
+            s in selected_schemas for s in ['Organization', 'LocalBusiness', 'Service']):
+        optimizations.append("✅ AggregateRating sera intégré dans Organization/LocalBusiness/Service")
+
+    # Vérifier les structures @graph
+    if len(selected_schemas) > 3:
+        optimizations.append("🔗 Structure @graph optimisée sera utilisée pour lier les schemas")
+
+    if optimizations:
+        st.success("**Optimisations détectées :**")
+        for opt in optimizations:
+            st.write(f"- {opt}")
+
+
+def render_recipe_form():
+    """Formulaire pour Recipe"""
+    additional_data = {}
+
+    with st.expander("🍳 Informations recette"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            additional_data['recipe_name'] = st.text_input(
+                "Nom de la recette",
+                value=st.session_state.get('recipe_name', '')
+            )
+            additional_data['recipe_description'] = st.text_area(
+                "Description",
+                value=st.session_state.get('recipe_description', ''),
+                height=100
+            )
+            additional_data['prep_time'] = st.text_input(
+                "Temps de préparation",
+                value=st.session_state.get('prep_time', ''),
+                placeholder="PT30M"
+            )
+            additional_data['cook_time'] = st.text_input(
+                "Temps de cuisson",
+                value=st.session_state.get('cook_time', ''),
+                placeholder="PT45M"
+            )
+
+        with col2:
+            additional_data['recipe_yield'] = st.text_input(
+                "Portions",
+                value=st.session_state.get('recipe_yield', '')
+            )
+            additional_data['recipe_category'] = st.text_input(
+                "Catégorie",
+                value=st.session_state.get('recipe_category', ''),
+                placeholder="Dessert, Plat principal..."
+            )
+            additional_data['recipe_cuisine'] = st.text_input(
+                "Cuisine",
+                value=st.session_state.get('recipe_cuisine', ''),
+                placeholder="Française, Italienne..."
+            )
+
+        # Ingrédients
+        additional_data['recipe_ingredients'] = st.text_area(
+            "Ingrédients (un par ligne)",
+            value=st.session_state.get('recipe_ingredients', ''),
+            height=100
         )
 
-        if not has_reviewable:
-            # Créer un Service automatiquement
-            service_schema = {
-                "@context": "https://schema.org",
-                "@type": "Service",
-                "name": additional_data.get('itemreviewed_name',
-                                            additional_data.get('service_name',
-                                                                'Agence marketing digital')),
-                "description": additional_data.get('service_description',
-                                                   client_info.get('description', '')),
-                "provider": {
-                    "@id": f"{client_info.get('website', '')}#organization"
-                },
-                "serviceType": additional_data.get('service_type', 'Marketing Agency'),
-                "@id": f"{client_info.get('website', '')}#service"
-            }
-            schemas.append(service_schema)
+        # Instructions
+        additional_data['recipe_instructions'] = st.text_area(
+            "Instructions (une par ligne)",
+            value=st.session_state.get('recipe_instructions', ''),
+            height=150
+        )
 
-    return schemas
+    return additional_data
+
+
+def render_video_object_form():
+    """Formulaire pour VideoObject"""
+    additional_data = {}
+
+    with st.expander("🎥 Informations vidéo"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            additional_data['video_name'] = st.text_input(
+                "Nom de la vidéo",
+                value=st.session_state.get('video_name', '')
+            )
+            additional_data['video_description'] = st.text_area(
+                "Description",
+                value=st.session_state.get('video_description', ''),
+                height=100
+            )
+            additional_data['video_duration'] = st.text_input(
+                "Durée",
+                value=st.session_state.get('video_duration', ''),
+                placeholder="PT15M30S"
+            )
+
+        with col2:
+            additional_data['video_thumbnail_url'] = st.text_input(
+                "URL miniature",
+                value=st.session_state.get('video_thumbnail_url', '')
+            )
+            additional_data['content_url'] = st.text_input(
+                "URL vidéo",
+                value=st.session_state.get('content_url', '')
+            )
+            additional_data['embed_url'] = st.text_input(
+                "URL d'intégration",
+                value=st.session_state.get('embed_url', '')
+            )
+
+    return additional_data
+
+
+def render_website_form(company_name, website):
+    """Formulaire pour WebSite"""
+    additional_data = {}
+
+    with st.expander("🌐 Informations du site web"):
+        additional_data['site_name'] = st.text_input(
+            "Nom du site",
+            value=st.session_state.get('site_name', company_name)
+        )
+        additional_data['alternate_name'] = st.text_input(
+            "Nom alternatif",
+            value=st.session_state.get('alternate_name', '')
+        )
+        additional_data['site_description'] = st.text_area(
+            "Description du site",
+            value=st.session_state.get('site_description', ''),
+            height=100
+        )
+
+        # Fonction de recherche
+        additional_data['potential_action'] = st.checkbox(
+            "Inclure la fonction de recherche",
+            value=st.session_state.get('potential_action', False)
+        )
+
+        if additional_data.get('potential_action'):
+            additional_data['search_target'] = st.text_input(
+                "URL de recherche",
+                value=st.session_state.get('search_target', f"{website}/search?q={{search_term_string}}")
+            )
+            additional_data['search_term'] = st.text_input(
+                "Paramètre de recherche",
+                value=st.session_state.get('search_term', 'search_term_string')
+            )
+
+    return additional_data
+
+
+def generate_simple_wordpress_code(schemas):
+    """Génère un code WordPress simple"""
+    code = """<?php
+// Ajouter ce code dans votre functions.php
+
+function add_custom_schemas() {
+    if (is_singular()) {
+        ?>
+        <script type="application/ld+json">
+"""
+
+    for schema in schemas:
+        code += json.dumps(schema, indent=2, ensure_ascii=False)
+        code += "\n"
+
+    code += """        </script>
+        <?php
+    }
+}
+add_action('wp_head', 'add_custom_schemas');
+?>"""
+
+    return code
+
+
+def generate_simple_implementation_doc(selected_schemas, generated_schemas):
+    """Génère une documentation d'implémentation simple"""
+    doc = f"""# Documentation des Schemas Générés
+
+## Schemas sélectionnés
+{', '.join(selected_schemas)}
+
+## Nombre de schemas générés
+{len(generated_schemas)}
+
+## Instructions d'intégration
+
+### HTML
+1. Copiez le code HTML généré
+2. Collez-le dans la section <head> de votre page
+3. Testez avec Google Rich Results Test
+
+### WordPress
+1. Ajoutez le code PHP dans functions.php
+2. Ou utilisez un plugin SEO (Yoast, RankMath)
+
+### Validation
+- Google Rich Results Test: https://search.google.com/test/rich-results
+- Schema.org Validator: https://validator.schema.org/
+
+## Schemas générés le
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+    return doc
+
 
 def generator_section():
-    """Section principale du générateur de schemas avec gestion des doublons"""
+    """Section principale du générateur de schemas avec gestion des doublons et test"""
 
     # Initialiser les générateurs
     base_generator = SchemaGenerator()
@@ -153,103 +707,122 @@ def generator_section():
 
     # Afficher l'analyse d'optimisation si activée
     if selected_schemas and enable_deduplication:
-        dedup_manager = SchemaDeduplicationManager()
-        optimization_result = dedup_manager.optimize_schema_selection(selected_schemas)
+        render_optimization_analysis(selected_schemas, enable_deduplication)
 
-        if optimization_result['warnings']:
-            with st.expander("🔍 Analyse d'optimisation", expanded=False):
-                st.info("Voici comment vos schemas seront optimisés :")
-                for warning in optimization_result['warnings']:
-                    st.write(warning)
+    # ===== NOUVELLE FONCTIONNALITÉ : BOUTON DE TEST =====
+    if selected_schemas:
+        st.divider()
+        st.subheader("🧪 Mode Test & Debug")
 
-                # Afficher la structure finale prévue
-                st.write("\n**Structure finale prévue :**")
+        col_test1, col_test2 = st.columns(2)
 
-                # Schemas principaux
-                if optimization_result['primary_schemas']:
-                    st.write("**Schemas principaux :**")
-                    for schema in optimization_result['primary_schemas']:
-                        if isinstance(schema, tuple):
-                            st.write(f"  • {' + '.join(schema)} (fusionnés)")
-                        else:
-                            st.write(f"  • {schema}")
-                            # Afficher les schemas intégrés
-                            if schema in optimization_result['embedded_schemas']:
-                                for embedded in optimization_result['embedded_schemas'][schema]:
-                                    st.write(f"    ↳ {embedded} (intégré)")
+        with col_test1:
+            if st.button(
+                    "🎯 Remplir avec données de test",
+                    type="secondary",
+                    help="Remplit automatiquement tous les formulaires avec des données génériques pour tester la génération",
+                    use_container_width=True
+            ):
+                # Appliquer les données de test
+                num_schemas = TestDataGenerator.populate_form_fields_with_test_data(selected_schemas)
+                st.success(f"✅ Données de test appliquées pour {num_schemas} schemas sélectionnés !")
+                st.info("💡 Vous pouvez maintenant cliquer sur 'Générer les schemas' pour tester.")
+                st.rerun()
 
-                # Schemas liés
-                if optimization_result['linked_schemas']:
-                    st.write("**Schemas liés séparément :**")
-                    for schema in optimization_result['linked_schemas']:
-                        st.write(f"  • {schema}")
+        with col_test2:
+            if st.button(
+                    "🗑️ Nettoyer les données de test",
+                    help="Efface toutes les données de test des formulaires",
+                    use_container_width=True
+            ):
+                # Nettoyer les données de test
+                keys_to_remove = [key for key in st.session_state.keys()
+                                  if any(test_key in key for test_key in [
+                        'company_name', 'description', 'website', 'logo',
+                        'product_name', 'headline', 'service_name',
+                        'event_name', 'recipe_name', 'given_name'
+                    ])]
+                for key in keys_to_remove:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.success("🗑️ Données de test nettoyées !")
+                st.rerun()
+
+    # ===== FIN NOUVELLE FONCTIONNALITÉ =====
 
     if not selected_schemas:
-        st.info("👆 Sélectionnez au moins un schema à générer")
+        st.warning(get_text('select_at_least_one', st.session_state.language))
         return
 
-    st.divider()
+    # Afficher les détails des schemas sélectionnés
+    if selected_schemas:
+        with st.expander(f"📊 Schemas sélectionnés ({len(selected_schemas)})", expanded=False):
+            for schema in selected_schemas:
+                st.write(f"✅ {schema}")
 
-    # Informations de base du client
-    st.subheader(f"🏢 {get_text('client_info', st.session_state.language)}")
+    # Configuration du client
+    st.divider()
+    st.subheader("🏢 Informations de base")
 
     col1, col2 = st.columns(2)
 
     with col1:
         company_name = st.text_input(
             get_text('company_name', st.session_state.language),
-            help=get_text('commercial_name_help', st.session_state.language)
+            value=st.session_state.get('company_name', ''),
+            key="company_name"
         )
-        legal_name = st.text_input(
-            get_text('legal_name', st.session_state.language),
-            value=company_name,
-            help=get_text('full_legal_name_help', st.session_state.language)
+        website = st.text_input(
+            "Site web",
+            placeholder="https://example.com",
+            value=st.session_state.get('website', ''),
+            key="website"
         )
 
     with col2:
-        website = st.text_input(
-            get_text('website', st.session_state.language),
-            placeholder="https://example.com",
-            help=get_text('complete_url_help', st.session_state.language)
+        description = st.text_area(
+            "Description de l'entreprise",
+            value=st.session_state.get('description', ''),
+            height=100,
+            key="description"
         )
         logo_url = st.text_input(
-            get_text('logo_url', st.session_state.language),
-            placeholder="https://example.com/logo.png",
-            help=get_text('logo_help', st.session_state.language)
+            "URL du logo",
+            value=st.session_state.get('logo', ''),
+            key="logo"
         )
 
-    # Description
-    description = st.text_area(
-        get_text('description', st.session_state.language),
-        help=get_text('detailed_description_help', st.session_state.language)
-    )
-
-    # Collecter les informations client
     client_info = {
-        'company_name': company_name,
-        'legal_name': legal_name,
+        'name': company_name,
         'website': website,
-        'logo': logo_url,
-        'description': description
+        'description': description,
+        'logo': logo_url
     }
 
-    # Données additionnelles selon les schemas sélectionnés
+    # Informations supplémentaires pour certains schemas
+    legal_name = st.text_input(
+        get_text('legal_name', st.session_state.language),
+        value=company_name,
+        help=get_text('full_legal_name_help', st.session_state.language)
+    )
+
+    # Formulaires spécifiques selon les schemas sélectionnés
+    st.divider()
+    st.subheader("📝 Détails des schemas")
+
     additional_data = {}
 
-    # Déterminer quels formulaires afficher selon l'optimisation
+    # Détermine quels formulaires afficher pour Review et AggregateRating
     show_review_form = True
     show_aggregate_form = True
 
-    if enable_deduplication and selected_schemas:
-        dedup_manager = SchemaDeduplicationManager()
-        optimization = dedup_manager.optimize_schema_selection(selected_schemas)
-
-        # Vérifier si Review sera intégré
-        for embedded_list in optimization['embedded_schemas'].values():
-            if 'Review' in embedded_list:
-                show_review_form = False
-            if 'AggregateRating' in embedded_list:
-                show_aggregate_form = False
+    if enable_deduplication:
+        # Ne pas afficher les formulaires séparés si les schemas peuvent être intégrés
+        has_reviewable = any(s in selected_schemas for s in ['Organization', 'LocalBusiness', 'Service', 'Product'])
+        if 'Review' in selected_schemas and has_reviewable:
+            show_review_form = False
+        if 'AggregateRating' in selected_schemas and has_reviewable:
+            show_aggregate_form = False
 
     # Business Info
     if any(schema in selected_schemas for schema in ['Organization', 'LocalBusiness', 'Restaurant', 'Store']):
@@ -284,23 +857,43 @@ def generator_section():
 
     # Product
     if 'Product' in selected_schemas:
-        product_data = render_product_form()
+        product_data = render_product_form(company_name, base_generator)
         additional_data.update(product_data)
 
-    # Article
+    # Article, NewsArticle, BlogPosting
     if any(schema in selected_schemas for schema in ['Article', 'NewsArticle', 'BlogPosting']):
-        article_data = render_article_form()
+        article_data = render_article_form(selected_schemas)
         additional_data.update(article_data)
 
-    # FAQ
-    if 'FAQPage' in selected_schemas:
-        faq_data = render_faq_form()
-        additional_data.update(faq_data)
+    # Recipe
+    if 'Recipe' in selected_schemas:
+        recipe_data = render_recipe_form()
+        additional_data.update(recipe_data)
+
+    # VideoObject
+    if 'VideoObject' in selected_schemas:
+        video_data = render_video_object_form()
+        additional_data.update(video_data)
 
     # Event
     if 'Event' in selected_schemas:
-        event_data = render_event_form()
+        event_data = render_event_form(company_name, website)
         additional_data.update(event_data)
+
+    # Course
+    if 'Course' in selected_schemas:
+        course_data = render_event_form(company_name, website)  # Réutilise le même formulaire
+        additional_data.update(course_data)
+
+    # WebSite
+    if 'WebSite' in selected_schemas:
+        website_data = render_website_form(company_name, website)
+        additional_data.update(website_data)
+
+    # FAQPage
+    if 'FAQPage' in selected_schemas:
+        faq_data = render_faq_form()
+        additional_data.update(faq_data)
 
     # HowTo
     if 'HowTo' in selected_schemas:
@@ -332,7 +925,7 @@ def generator_section():
         if has_org_or_local and enable_deduplication:
             st.info("ℹ️ Les avis et évaluations du Service seront centralisés dans Organization/LocalBusiness")
 
-        # Appeler render_service_form normalement (sans paramètre inexistant)
+        # Appeler render_service_form normalement
         service_data = render_service_form(company_name)
         additional_data.update(service_data)
 
@@ -363,58 +956,20 @@ def generator_section():
             st.info(
                 "💡 Le schema AggregateRating peut être intégré automatiquement dans Organization/Service. Activez l'optimisation pour éviter les doublons.")
 
-        # Toujours afficher le formulaire pour collecter les données
+        # Toujours afficher le formulaire
         aggregate_data = render_aggregate_rating_form()
         additional_data.update(aggregate_data)
 
+    # Bouton de génération
     st.divider()
 
-    # Bouton de génération
-    if st.button(
-            f"🚀 {get_text('generate_schemas', st.session_state.language)}",
-            type="primary",
-            use_container_width=True
-    ):
-        with st.spinner(get_text('generating_schemas', st.session_state.language)):
+    if st.button("🚀 Générer les schemas", type="primary", use_container_width=True):
+        if not company_name.strip():
+            st.error("⚠️ Le nom de l'entreprise est requis")
+            return
+
+        with st.spinner("Génération des schemas en cours..."):
             try:
-                # Debug optionnel - ACTIVÉ pour diagnostic
-                with st.expander("🔍 Debug - Données envoyées au générateur", expanded=True):
-                    st.write("**Client Info:**")
-                    st.json(client_info)
-                    st.write("**Additional Data AVANT nettoyage:**")
-                    st.json(additional_data)
-
-                    # NETTOYER les données Service si nécessaire
-                    if enable_deduplication and 'Service' in selected_schemas:
-                        has_org_or_local = ('Organization' in selected_schemas or 'LocalBusiness' in selected_schemas)
-                        if has_org_or_local:
-                            st.warning("🧹 Nettoyage des données Service pour éviter la duplication")
-
-                            # Supprimer les données de témoignages du Service
-                            keys_to_remove = []
-                            for key in additional_data.keys():
-                                if 'testimonial' in key or 'service_review' in key or 'service_rating' in key:
-                                    keys_to_remove.append(key)
-
-                            for key in keys_to_remove:
-                                del additional_data[key]
-                                st.write(f"  ❌ Supprimé: {key}")
-
-                    st.write("**Additional Data APRÈS nettoyage:**")
-                    st.json(additional_data)
-
-                    # Vérifier spécifiquement les données AggregateRating
-                    if 'AggregateRating' in selected_schemas:
-                        st.write("**🔍 Données AggregateRating détectées:**")
-                        aggregate_keys = ['rating_value', 'review_count', 'target_name', 'target_type']
-                        for key in aggregate_keys:
-                            if key in additional_data:
-                                st.write(f"  • {key}: {additional_data[key]}")
-
-                        # Vérifier si les données sont présentes
-                        if not any(key in additional_data for key in aggregate_keys):
-                            st.warning("⚠️ Aucune donnée AggregateRating trouvée dans additional_data !")
-
                 # S'assurer que les données essentielles sont présentes
                 if 'logo' not in additional_data and logo_url:
                     additional_data['logo'] = logo_url
@@ -515,35 +1070,26 @@ def generator_section():
                         if isinstance(schema_type, list):
                             schema_type = ' + '.join(schema_type)
                         schema_id = schema.get('@id', '')
-                        st.write(f"{j + 1}. **{schema_type}** - `{schema_id}`")
+                        st.write(f"{j + 1}. **{schema_type}** {f'(ID: {schema_id})' if schema_id else ''}")
 
-                        # Afficher les liens
-                        if 'provider' in schema and isinstance(schema['provider'], dict):
-                            st.write(f"   ↳ Fournisseur : {schema['provider'].get('@id', '')}")
-                        if 'itemReviewed' in schema and isinstance(schema['itemReviewed'], dict):
-                            st.write(f"   ↳ Élément évalué : {schema['itemReviewed'].get('@id', '')}")
-                        if 'aggregateRating' in schema:
-                            st.write(f"   ↳ Note moyenne intégrée")
-                        if 'review' in schema:
-                            review_count = len(schema['review']) if isinstance(schema['review'], list) else 1
-                            st.write(f"   ↳ {review_count} avis intégré{'s' if review_count > 1 else ''}")
+                # Afficher chaque schema de la structure
+                if show_preview or show_code:
+                    for j, schema in enumerate(schema_data['@graph']):
+                        schema_type = schema.get('@type', 'Unknown')
+                        if isinstance(schema_type, list):
+                            schema_type = ' + '.join(schema_type)
 
-                # Afficher chaque schema du graph
-                for j, schema in enumerate(schema_data['@graph']):
-                    schema_type = schema.get('@type', 'Unknown')
-                    if isinstance(schema_type, list):
-                        schema_type = ' + '.join(schema_type)
+                        with st.expander(f"{schema_type} (Structure #{j + 1})", expanded=False):
+                            if show_preview:
+                                # Affichage simplifié du schema
+                                st.json(schema, expanded=False)
 
-                    with st.expander(f"{schema_type} #{j + 1}", expanded=(j == 0)):
-                        if show_preview:
-                            display_schema_preview(schema)
-
-                        if show_code:
-                            if minify:
-                                code = json.dumps(schema, ensure_ascii=False, separators=(',', ':'))
-                            else:
-                                code = json.dumps(schema, indent=2, ensure_ascii=False)
-                            st.code(code, language='json')
+                            if show_code:
+                                if minify:
+                                    code = json.dumps(schema, ensure_ascii=False, separators=(',', ':'))
+                                else:
+                                    code = json.dumps(schema, indent=2, ensure_ascii=False)
+                                st.code(code, language='json')
             else:
                 # Schema individuel
                 schema_type = schema_data.get('@type', 'Unknown')
@@ -552,7 +1098,8 @@ def generator_section():
 
                 with st.expander(f"{schema_type} #{i + 1}", expanded=(i == 0)):
                     if show_preview:
-                        display_schema_preview(schema_data)
+                        # Affichage simplifié du schema
+                        st.json(schema_data, expanded=False)
 
                     if show_code:
                         if minify:
@@ -601,10 +1148,10 @@ def render_export_options(generator, selected_schemas):
         )
 
     with col3:
-        # WordPress/CMS
-        wp_code = generate_wordpress_code(st.session_state.generated_schemas)
+        # WordPress/CMS - Code simplifié
+        wp_code = generate_simple_wordpress_code(st.session_state.generated_schemas)
         st.download_button(
-            label="📝 Code WordPress",
+            label="🔌 Code WordPress",
             data=wp_code,
             file_name="schemas-wordpress.txt",
             mime="text/plain",
@@ -612,11 +1159,8 @@ def render_export_options(generator, selected_schemas):
         )
 
     with col4:
-        # Documentation
-        doc = generate_implementation_doc(
-            selected_schemas,
-            st.session_state.generated_schemas
-        )
+        # Documentation simplifiée
+        doc = generate_simple_implementation_doc(selected_schemas, st.session_state.generated_schemas)
         st.download_button(
             label="📚 Documentation",
             data=doc,
@@ -676,71 +1220,28 @@ def render_export_options(generator, selected_schemas):
             st.markdown("""
             ### Google Tag Manager
 
-            1. **Créez une nouvelle balise**
-               - Type : HTML personnalisé
-               - Déclencheur : Toutes les pages (ou pages spécifiques)
+            1. **Créez une balise** HTML personnalisée
+            2. **Collez** le code HTML généré
+            3. **Configurez** le déclencheur (All Pages ou spécifique)
+            4. **Testez** en mode prévisualisation
+            5. **Publiez** votre conteneur
 
-            2. **Collez le code JSON-LD**
-               ```html
-               <script type="application/ld+json">
-               { ... }
-               </script>
-               ```
-
-            3. **Testez en mode aperçu**
-            4. **Publiez le conteneur**
+            **Type de balise :** HTML personnalisé  
+            **Déclenchement :** All Pages (ou conditions spécifiques)
             """)
 
         with tab4:
             st.markdown("""
             ### Validation et test
 
-            **Outils de validation recommandés :**
+            **Outils recommandés :**
+            - [Google Rich Results Test](https://search.google.com/test/rich-results)
+            - [Schema.org Validator](https://validator.schema.org/)
+            - [JSON-LD Playground](https://json-ld.org/playground/)
 
-            1. **[Google Rich Results Test](https://search.google.com/test/rich-results)**
-               - Test officiel de Google
-               - Montre l'aperçu dans les SERP
-
-            2. **[Schema.org Validator](https://validator.schema.org/)**
-               - Validation complète
-               - Détection d'erreurs
-
-            3. **[Google Search Console](https://search.google.com/search-console)**
-               - Monitoring en temps réel
-               - Rapports d'erreurs
-
-            **Points à vérifier :**
-            - ✅ Syntaxe JSON valide
-            - ✅ Propriétés requises présentes
-            - ✅ Format des dates (ISO 8601)
-            - ✅ URLs absolues
-            - ✅ Pas de doublons
+            **Étapes de validation :**
+            1. Copiez l'URL de votre page ou le code JSON-LD
+            2. Testez avec Google Rich Results Test
+            3. Corrigez les erreurs éventuelles
+            4. Vérifiez l'éligibilité aux résultats enrichis
             """)
-
-    # Conseils d'optimisation
-    with st.expander("💡 Conseils d'optimisation"):
-        st.markdown("""
-        ### Bonnes pratiques pour les schemas
-
-        **1. Évitez les doublons**
-        - Un seul schema par type par page
-        - Utilisez @graph pour lier plusieurs schemas
-
-        **2. Complétez les champs importants**
-        - Plus d'informations = meilleure visibilité
-        - Privilégiez les champs reconnus par Google
-
-        **3. Maintenez à jour**
-        - Prix, disponibilité, horaires
-        - Avis et notations
-        - Événements et dates
-
-        **4. Cohérence des données**
-        - Les informations doivent correspondre au contenu visible
-        - Utilisez les mêmes données partout
-
-        **5. Images optimisées**
-        - Haute résolution (min 1200x1200 pour les produits)
-        - Format JPG ou PNG
-        - URLs absolues et accessibles
-        """)

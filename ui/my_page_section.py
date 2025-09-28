@@ -71,15 +71,20 @@ def my_page_section():
                 else:
                     # Scraper les schemas
                     scraper = SchemaScraper()
-                    schemas_data = scraper.scrape_schemas(my_url)
+                    schemas = scraper.extract_schemas(my_url)
 
-                    # Analyser les schemas
+                    # Extraire les types de schemas
+                    schema_types = scraper.get_schema_types(schemas)
+
+                    # Analyser les schemas (méthode simplifiée)
                     analyzer = SchemaAnalyzer()
-                    analyzed_schemas = analyzer.analyze_schemas(schemas_data['schemas'])
+                    analyzed_schemas = analyzer.analyze_page_schemas(schemas, schema_types)
 
                     # Combiner les données
                     result = {
-                        **schemas_data,
+                        'schemas': schemas,
+                        'schema_types': list(schema_types),
+                        'url': my_url,
                         'analysis': analyzed_schemas
                     }
 
@@ -116,7 +121,7 @@ def _display_my_page_results():
 
 
 def _display_current_schemas(schemas_data):
-    """Affiche les schemas actuels de la page"""
+    """Affiche les schemas actuels de la page - VERSION CORRIGÉE"""
     if not schemas_data.get('schemas'):
         st.info(get_text('no_schemas_found', st.session_state.language))
         return
@@ -149,41 +154,130 @@ def _display_current_schemas(schemas_data):
             value=f"{page_score:.0f}%"
         )
 
-    # Liste des schemas trouvés
+    # Liste des schemas trouvés - VERSION CORRIGÉE
     st.subheader(f"📋 {get_text('schemas_found_on_page', st.session_state.language)}")
 
-    for i, (schema_type, schema_data) in enumerate(schemas_data['schemas'].items()):
-        with st.expander(f"{get_schema_icon(schema_type)} {schema_type}", expanded=False):
-            # Informations de base du schema
-            col1, col2 = st.columns(2)
+    if not schema_types:
+        st.info(get_text('no_schemas_found', st.session_state.language))
+        return
 
-            with col1:
-                if isinstance(schema_data, dict):
-                    name = schema_data.get('name', get_text('no_name_specified', st.session_state.language))
-                    st.write(f"**{get_text('name_label', st.session_state.language)}** {name}")
+    # Organiser les schemas par type
+    schemas_by_type = {}
+    all_schemas = schemas_data.get('schemas', {})
 
-                    if 'description' in schema_data:
-                        desc = schema_data['description'][:150] + "..." if len(
-                            str(schema_data['description'])) > 150 else schema_data['description']
+    # Parcourir tous les formats (json-ld, microdata, etc.)
+    for format_name, schema_list in all_schemas.items():
+        if isinstance(schema_list, list):
+            for schema in schema_list:
+                if isinstance(schema, dict):
+                    # Extraire le type du schema
+                    schema_type = None
+
+                    # Pour JSON-LD (@type)
+                    if '@type' in schema:
+                        schema_type = schema['@type']
+                        if isinstance(schema_type, list):
+                            schema_type = schema_type[0]  # Prendre le premier type
+                        # Nettoyer l'URL pour garder seulement le nom du type
+                        schema_type = schema_type.split('/')[-1] if '/' in schema_type else schema_type
+
+                    # Pour Microdata (type)
+                    elif 'type' in schema:
+                        schema_type = schema['type']
+                        schema_type = schema_type.split('/')[-1] if '/' in schema_type else schema_type
+
+                    if schema_type:
+                        if schema_type not in schemas_by_type:
+                            schemas_by_type[schema_type] = []
+                        schemas_by_type[schema_type].append({
+                            'schema': schema,
+                            'format': format_name
+                        })
+
+    # Afficher chaque type de schema trouvé
+    for i, (schema_type, schema_instances) in enumerate(sorted(schemas_by_type.items())):
+        with st.expander(
+                f"{get_schema_icon(schema_type)} {schema_type} ({len(schema_instances)} instance{'s' if len(schema_instances) > 1 else ''})",
+                expanded=False):
+
+            for j, instance in enumerate(schema_instances):
+                schema = instance['schema']
+                format_type = instance['format']
+
+                if len(schema_instances) > 1:
+                    st.write(f"**Instance {j + 1} ({format_type.upper()})**")
+                else:
+                    st.write(f"**Source: {format_type.upper()}**")
+
+                # Informations de base du schema
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # Nom du schema
+                    name = None
+                    if 'name' in schema:
+                        name = schema['name']
+                    elif '@context' in schema and 'name' in schema:
+                        name = schema['name']
+                    elif 'properties' in schema and 'name' in schema['properties']:
+                        name = schema['properties']['name']
+
+                    if name:
+                        st.write(f"**{get_text('name_label', st.session_state.language)}** {name}")
+                    else:
+                        st.write(
+                            f"**{get_text('name_label', st.session_state.language)}** {get_text('no_name_specified', st.session_state.language)}")
+
+                    # Description
+                    description = None
+                    if 'description' in schema:
+                        description = schema['description']
+                    elif 'properties' in schema and 'description' in schema['properties']:
+                        description = schema['properties']['description']
+
+                    if description:
+                        desc = description[:150] + "..." if len(str(description)) > 150 else description
                         st.write(f"**{get_text('description_label', st.session_state.language)}** {desc}")
 
-            with col2:
-                if isinstance(schema_data, dict):
-                    filled_fields = sum(1 for v in schema_data.values() if v not in [None, "", []])
-                    total_fields = len(schema_data)
-                    completion = (filled_fields / total_fields * 100) if total_fields > 0 else 0
+                with col2:
+                    # Statistiques de complétude
+                    filled_fields = 0
+                    total_fields = 0
 
-                    st.metric(
-                        label=get_text('completion', st.session_state.language),
-                        value=f"{completion:.0f}%"
-                    )
-                    st.write(f"{filled_fields}/{total_fields} {get_text('fields_filled', st.session_state.language)}")
+                    if format_type == 'json-ld':
+                        # Pour JSON-LD, compter les propriétés non-vides
+                        for key, value in schema.items():
+                            if key not in ['@context', '@type', '@id']:
+                                total_fields += 1
+                                if value not in [None, "", []]:
+                                    filled_fields += 1
+                    else:
+                        # Pour les autres formats
+                        if 'properties' in schema:
+                            total_fields = len(schema['properties'])
+                            filled_fields = sum(1 for v in schema['properties'].values() if v not in [None, "", []])
+                        else:
+                            total_fields = len(schema)
+                            filled_fields = sum(1 for v in schema.values() if v not in [None, "", []])
 
-            # Bouton pour voir le JSON complet
-            if st.button(f"{get_text('view_json', st.session_state.language)}", key=f"view_json_{i}"):
-                st.json(schema_data)
+                    if total_fields > 0:
+                        completion = (filled_fields / total_fields * 100)
+                        st.metric(
+                            label=get_text('completion', st.session_state.language),
+                            value=f"{completion:.0f}%"
+                        )
+                        st.write(
+                            f"{filled_fields}/{total_fields} {get_text('fields_filled', st.session_state.language)}")
 
-    # Option pour voir le JSON brut
+                # Bouton pour voir le JSON complet
+                unique_key = f"view_json_{schema_type}_{i}_{j}"
+                if st.button(f"{get_text('view_json', st.session_state.language)}", key=unique_key):
+                    st.json(schema)
+
+                if j < len(schema_instances) - 1:
+                    st.divider()
+
+    # Option pour voir le JSON brut de tous les schemas
     with st.expander(f"🔍 {get_text('view_raw_data', st.session_state.language)}"):
         st.json(schemas_data.get('schemas', {}))
 
@@ -248,16 +342,6 @@ def _display_comparison(serp_analysis):
             value=f"{coverage_rate:.0f}%"
         )
 
-    with col4:
-        competitive_missing = len(comparison.get('missing_competitive', []))
-        if competitive_missing == 0:
-            st.metric(get_text('competitive_schemas', st.session_state.language),
-                      f"✅ {get_text('complete', st.session_state.language)}",
-                      delta=get_text('excellent', st.session_state.language))
-        else:
-            st.metric(get_text('missing_schemas', st.session_state.language), competitive_missing,
-                      delta=f"-{competitive_missing}")
-
     # Tableau de comparaison détaillée
     st.subheader(f"📊 {get_text('detailed_schema_analysis', st.session_state.language)}")
 
@@ -292,10 +376,11 @@ def _display_comparison(serp_analysis):
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 
+# Dans my_page_section.py, fonction _display_schema_recommendations()
+# REMPLACER toute la fonction par :
+
 def _display_schema_recommendations(serp_analysis, schemas_data):
     """Affiche les recommandations de schemas spécifiques"""
-    st.subheader(f"💡 {get_text('schema_recommendations', st.session_state.language)}")
-    st.caption(get_text('competitor_analysis', st.session_state.language))
 
     # Initialiser le sélectionneur de schemas s'il n'existe pas
     if 'selected_schemas' not in st.session_state:
@@ -307,12 +392,16 @@ def _display_schema_recommendations(serp_analysis, schemas_data):
         set(schemas_data.get('schema_types', []))
     )
 
-    # Générer les recommandations manuellement (puisque get_recommendations n'existe pas)
+    # Générer les recommandations manuellement
     recommendations = _generate_recommendations(serp_analysis, comparison)
 
+    # Si pas de recommandations, ne rien afficher du tout
     if not recommendations:
-        st.success(get_text('already_optimized', st.session_state.language))
         return
+
+    # Afficher le titre et sous-titre seulement s'il y a des recommandations
+    st.subheader(f"💡 {get_text('schema_recommendations', st.session_state.language)}")
+    st.caption(get_text('competitor_analysis', st.session_state.language))
 
     # Grouper par priorité
     high_priority = [r for r in recommendations if r['priority'] == 'high']
@@ -392,7 +481,6 @@ def _display_schema_recommendations(serp_analysis, schemas_data):
                 f"✅ {len(st.session_state.selected_schemas)} {get_text('schemas_ready_generator', st.session_state.language)}")
             st.balloons()
             st.info(f"👆 {get_text('click_generator_continue', st.session_state.language)}")
-
 
 def _generate_recommendations(serp_analysis, comparison):
     """Génère les recommandations basées sur l'analyse SERP et la comparaison"""
